@@ -25,7 +25,7 @@
             transition: transform 0.1s, background 0.15s;
         }
         .ctrl-btn:active { transform: scale(0.88); background: rgba(13,148,136,0.95); }
-</style>
+    </style>
 </head>
 <body>
 <div id="canvas-container"></div>
@@ -69,39 +69,63 @@ import { Sky } from 'three/addons/objects/Sky.js';
 
 // === SCENE SETUP ===
 const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x8fb8a0, 0.008);
 const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 2000);
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.5;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.getElementById('canvas-container').appendChild(renderer.domElement);
 
 // === LIGHTING ===
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+const ambientLight = new THREE.AmbientLight(0x8faaaa, 0.5);
 scene.add(ambientLight);
-const dirLight = new THREE.DirectionalLight(0xfff4e0, 1.2);
-dirLight.position.set(-1, 1.5, 1);
+const dirLight = new THREE.DirectionalLight(0xfff4e0, 1.0);
+dirLight.position.set(-20, 30, 10);
+dirLight.castShadow = true;
+dirLight.shadow.mapSize.set(1024, 1024);
+dirLight.shadow.camera.near = 1;
+dirLight.shadow.camera.far = 120;
+dirLight.shadow.camera.left = -60;
+dirLight.shadow.camera.right = 60;
+dirLight.shadow.camera.top = 60;
+dirLight.shadow.camera.bottom = -60;
 scene.add(dirLight);
 
 
-// === SKY ===
+// === SKY (overcast/rainy mood) ===
 const sky = new Sky();
 sky.scale.setScalar(10000);
 scene.add(sky);
 const skyUniforms = sky.material.uniforms;
-skyUniforms['turbidity'].value = 4;
-skyUniforms['rayleigh'].value = 2;
-skyUniforms['mieCoefficient'].value = 0.005;
-skyUniforms['mieDirectionalG'].value = 0.8;
+skyUniforms['turbidity'].value = 10;
+skyUniforms['rayleigh'].value = 1.2;
+skyUniforms['mieCoefficient'].value = 0.1;
+skyUniforms['mieDirectionalG'].value = 0.7;
 const sun = new THREE.Vector3();
-const phi = THREE.MathUtils.degToRad(88);
-const theta = THREE.MathUtils.degToRad(180);
+const phi = THREE.MathUtils.degToRad(85);
+const theta = THREE.MathUtils.degToRad(200);
 sun.setFromSphericalCoords(1, phi, theta);
 skyUniforms['sunPosition'].value.copy(sun);
 
-// === WATER ===
-const waterGeometry = new THREE.PlaneGeometry(800, 800, 128, 128);
+// === GROUND (forest floor around the lake) ===
+const groundGeo = new THREE.CircleGeometry(120, 64);
+const groundMat = new THREE.MeshStandardMaterial({
+    color: 0x2d5a27, roughness: 0.95, metalness: 0
+});
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -0.5;
+ground.receiveShadow = true;
+scene.add(ground);
+
+
+// === WATER (lake in the forest) ===
+const lakeRadius = 45;
+const waterGeometry = new THREE.CircleGeometry(lakeRadius, 64);
 const water = new Water(waterGeometry, {
     textureWidth: 512,
     textureHeight: 512,
@@ -110,76 +134,146 @@ const water = new Water(waterGeometry, {
         (texture) => { texture.wrapS = texture.wrapT = THREE.RepeatWrapping; }
     ),
     sunDirection: new THREE.Vector3(sun.x, sun.y, sun.z).normalize(),
-    sunColor: 0xffffff,
-    waterColor: 0x0d7377,
-    distortionScale: 3.7,
-    fog: scene.fog !== undefined
+    sunColor: 0xaaaaaa,
+    waterColor: 0x1a5c4c,
+    distortionScale: 2.5,
+    fog: true
 });
 water.rotation.x = -Math.PI / 2;
-water.position.y = -50; // Start hidden below view
+water.position.y = -50; // Start hidden below
 scene.add(water);
 
 
-// === BOAT (procedural 3D) ===
+// === FOREST (procedural trees around the lake) ===
+function createTree(height, trunkRadius) {
+    const group = new THREE.Group();
+
+    // Trunk
+    const trunkGeo = new THREE.CylinderGeometry(trunkRadius * 0.6, trunkRadius, height * 0.4, 8);
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3d2817, roughness: 0.9 });
+    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+    trunk.position.y = height * 0.2;
+    trunk.castShadow = true;
+    group.add(trunk);
+
+    // Foliage (multiple cone layers for pine-like trees)
+    const foliageMat = new THREE.MeshStandardMaterial({
+        color: 0x1a4d2e, roughness: 0.8, metalness: 0
+    });
+    const layers = 3 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < layers; i++) {
+        const layerHeight = height * (0.25 - i * 0.03);
+        const layerRadius = (height * 0.3) * (1 - i * 0.15);
+        const coneGeo = new THREE.ConeGeometry(layerRadius, layerHeight, 8);
+        const cone = new THREE.Mesh(coneGeo, foliageMat.clone());
+        cone.material.color.setHSL(0.35 + Math.random() * 0.05, 0.5 + Math.random() * 0.2, 0.15 + Math.random() * 0.1);
+        cone.position.y = height * 0.35 + i * (layerHeight * 0.55);
+        cone.rotation.y = Math.random() * Math.PI;
+        cone.castShadow = true;
+        group.add(cone);
+    }
+
+    return group;
+}
+
+// Place trees in a ring around the lake
+const trees = [];
+const treeCount = 80;
+for (let i = 0; i < treeCount; i++) {
+    const angle = (i / treeCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.3;
+    const dist = lakeRadius + 8 + Math.random() * 40;
+    const height = 8 + Math.random() * 12;
+    const tree = createTree(height, 0.3 + Math.random() * 0.2);
+    tree.position.set(Math.cos(angle) * dist, -0.5, Math.sin(angle) * dist);
+    tree.rotation.y = Math.random() * Math.PI * 2;
+    scene.add(tree);
+    trees.push(tree);
+}
+
+// Inner ring (closer to lake edge, smaller trees)
+for (let i = 0; i < 30; i++) {
+    const angle = (i / 30) * Math.PI * 2 + (Math.random() - 0.5) * 0.5;
+    const dist = lakeRadius + 3 + Math.random() * 8;
+    const height = 5 + Math.random() * 7;
+    const tree = createTree(height, 0.2 + Math.random() * 0.15);
+    tree.position.set(Math.cos(angle) * dist, -0.5, Math.sin(angle) * dist);
+    tree.rotation.y = Math.random() * Math.PI * 2;
+    scene.add(tree);
+    trees.push(tree);
+}
+
+
+// === BOAT (smaller, visible from distance) ===
 function createBoat() {
     const group = new THREE.Group();
 
     // Hull
     const hullShape = new THREE.Shape();
-    hullShape.moveTo(-2, 0);
-    hullShape.quadraticCurveTo(-2.5, 1.2, -1.8, 2.2);
-    hullShape.lineTo(1.8, 2.2);
-    hullShape.quadraticCurveTo(2.5, 1.2, 2, 0);
-    hullShape.lineTo(-2, 0);
+    hullShape.moveTo(-1, 0);
+    hullShape.quadraticCurveTo(-1.3, 0.6, -0.9, 1.1);
+    hullShape.lineTo(0.9, 1.1);
+    hullShape.quadraticCurveTo(1.3, 0.6, 1, 0);
+    hullShape.lineTo(-1, 0);
 
-    const extrudeSettings = { depth: 6, bevelEnabled: true, bevelThickness: 0.2, bevelSize: 0.1 };
+    const extrudeSettings = { depth: 3.5, bevelEnabled: true, bevelThickness: 0.1, bevelSize: 0.05 };
     const hullGeo = new THREE.ExtrudeGeometry(hullShape, extrudeSettings);
-    const hullMat = new THREE.MeshStandardMaterial({ color: 0x5c3317, roughness: 0.8 });
+    const hullMat = new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.7 });
     const hull = new THREE.Mesh(hullGeo, hullMat);
     hull.rotation.x = -Math.PI / 2;
-    hull.position.set(0, -0.5, -3);
+    hull.position.set(0, -0.3, -1.75);
+    hull.castShadow = true;
     group.add(hull);
 
-    // Seats
-    const seatGeo = new THREE.BoxGeometry(3.2, 0.2, 0.8);
-    const seatMat = new THREE.MeshStandardMaterial({ color: 0x8b5e3c, roughness: 0.7 });
-    const seat1 = new THREE.Mesh(seatGeo, seatMat);
-    seat1.position.set(0, 1.2, -1);
-    group.add(seat1);
-    const seat2 = new THREE.Mesh(seatGeo, seatMat);
-    seat2.position.set(0, 1.2, 1.5);
-    group.add(seat2);
+    // Seat
+    const seatGeo = new THREE.BoxGeometry(1.6, 0.1, 0.4);
+    const seatMat = new THREE.MeshStandardMaterial({ color: 0xa0704a, roughness: 0.7 });
+    const seat = new THREE.Mesh(seatGeo, seatMat);
+    seat.position.set(0, 0.5, 0);
+    group.add(seat);
 
     // Oars
     const oarMat = new THREE.MeshStandardMaterial({ color: 0x6b4226, roughness: 0.6 });
-    const oarShaftGeo = new THREE.CylinderGeometry(0.06, 0.06, 5, 8);
-    const oarBladeGeo = new THREE.BoxGeometry(0.5, 0.08, 1.2);
+    const oarShaftGeo = new THREE.CylinderGeometry(0.04, 0.04, 3.5, 6);
+    const oarBladeGeo = new THREE.BoxGeometry(0.35, 0.05, 0.8);
 
-    // Left oar
     const leftOar = new THREE.Group();
     const lShaft = new THREE.Mesh(oarShaftGeo, oarMat);
     lShaft.rotation.z = Math.PI / 2;
     leftOar.add(lShaft);
     const lBlade = new THREE.Mesh(oarBladeGeo, oarMat);
-    lBlade.position.set(-2.5, 0, 0);
+    lBlade.position.set(-1.8, 0, 0);
     leftOar.add(lBlade);
-    leftOar.position.set(-1.6, 1.4, 0);
+    leftOar.position.set(-0.8, 0.6, 0);
     leftOar.name = 'leftOar';
     group.add(leftOar);
 
-    // Right oar
     const rightOar = new THREE.Group();
     const rShaft = new THREE.Mesh(oarShaftGeo, oarMat);
     rShaft.rotation.z = Math.PI / 2;
     rightOar.add(rShaft);
     const rBlade = new THREE.Mesh(oarBladeGeo, oarMat);
-    rBlade.position.set(2.5, 0, 0);
+    rBlade.position.set(1.8, 0, 0);
     rightOar.add(rBlade);
-    rightOar.position.set(1.6, 1.4, 0);
+    rightOar.position.set(0.8, 0.6, 0);
     rightOar.name = 'rightOar';
     group.add(rightOar);
 
-    group.scale.set(0.8, 0.8, 0.8);
+    // Small red flag on back (visibility from distance)
+    const flagPoleGeo = new THREE.CylinderGeometry(0.02, 0.02, 2, 6);
+    const flagPole = new THREE.Mesh(flagPoleGeo, oarMat);
+    flagPole.position.set(0, 1.2, -1.5);
+    group.add(flagPole);
+
+    const flagGeo = new THREE.PlaneGeometry(0.8, 0.5);
+    const flagMat = new THREE.MeshStandardMaterial({
+        color: 0xe63946, side: THREE.DoubleSide, emissive: 0xe63946, emissiveIntensity: 0.3
+    });
+    const flag = new THREE.Mesh(flagGeo, flagMat);
+    flag.position.set(0.4, 1.8, -1.5);
+    flag.name = 'boatFlag';
+    group.add(flag);
+
+    group.scale.set(0.5, 0.5, 0.5);
     return group;
 }
 
@@ -189,58 +283,50 @@ boat.visible = false;
 scene.add(boat);
 
 
-// === DOCK (goal) ===
+// === DOCK (goal, at forest edge) ===
 function createDock() {
     const group = new THREE.Group();
     const woodMat = new THREE.MeshStandardMaterial({ color: 0x6b4226, roughness: 0.9 });
     const darkWoodMat = new THREE.MeshStandardMaterial({ color: 0x3e2412, roughness: 0.85 });
 
     // Platform planks
-    for (let i = 0; i < 5; i++) {
-        const plank = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.2, 6), woodMat);
-        plank.position.set(i * 1.3 - 2.6, 1.5, 0);
+    for (let i = 0; i < 4; i++) {
+        const plank = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.15, 5), woodMat);
+        plank.position.set(i * 0.9 - 1.35, 0.8, 0);
+        plank.castShadow = true;
         group.add(plank);
     }
 
     // Poles
-    const poleGeo = new THREE.CylinderGeometry(0.15, 0.18, 5, 8);
-    const positions = [[-3, 0, -2.5], [-3, 0, 2.5], [3, 0, -2.5], [3, 0, 2.5]];
-    positions.forEach(([x, y, z]) => {
+    const poleGeo = new THREE.CylinderGeometry(0.1, 0.13, 4, 8);
+    [[-1.8, 0, -2], [-1.8, 0, 2], [1.8, 0, -2], [1.8, 0, 2]].forEach(([x, y, z]) => {
         const pole = new THREE.Mesh(poleGeo, darkWoodMat);
         pole.position.set(x, y, z);
+        pole.castShadow = true;
         group.add(pole);
     });
 
-    // Flag
-    const flagPoleGeo = new THREE.CylinderGeometry(0.05, 0.05, 4, 8);
-    const flagPole = new THREE.Mesh(flagPoleGeo, darkWoodMat);
-    flagPole.position.set(0, 3.5, -2.5);
-    group.add(flagPole);
-
-    const flagGeo = new THREE.PlaneGeometry(1.8, 1);
-    const flagMat = new THREE.MeshStandardMaterial({
-        color: 0x0d9488, side: THREE.DoubleSide, emissive: 0x0d9488, emissiveIntensity: 0.2
-    });
-    const flag = new THREE.Mesh(flagGeo, flagMat);
-    flag.position.set(1, 4.5, -2.5);
-    flag.name = 'flag';
-    group.add(flag);
-
-    // Lantern (glowing sphere)
-    const lanternGeo = new THREE.SphereGeometry(0.25, 16, 16);
+    // Lantern
+    const lanternGeo = new THREE.SphereGeometry(0.2, 12, 12);
     const lanternMat = new THREE.MeshStandardMaterial({
-        color: 0xffdd44, emissive: 0xffaa00, emissiveIntensity: 1.5
+        color: 0xffdd44, emissive: 0xffaa00, emissiveIntensity: 2.0
     });
     const lantern = new THREE.Mesh(lanternGeo, lanternMat);
-    lantern.position.set(0, 5.8, -2.5);
+    lantern.position.set(0, 3.5, -2);
     group.add(lantern);
 
-    // Point light from lantern
-    const lanternLight = new THREE.PointLight(0xffaa00, 3, 20);
+    const lanternLight = new THREE.PointLight(0xffaa00, 4, 25);
     lanternLight.position.copy(lantern.position);
     group.add(lanternLight);
 
-    group.position.set(40, -1, -30);
+    // Place dock at lake edge
+    const dockAngle = Math.PI * 0.75;
+    group.position.set(
+        Math.cos(dockAngle) * (lakeRadius - 4),
+        -0.5,
+        Math.sin(dockAngle) * (lakeRadius - 4)
+    );
+    group.rotation.y = -dockAngle + Math.PI / 2;
     return group;
 }
 
@@ -249,71 +335,97 @@ dock.visible = false;
 scene.add(dock);
 
 
-// === WATERFALL PARTICLES ===
-const waterfallParticles = [];
-const particleGeo = new THREE.SphereGeometry(0.12, 6, 6);
-const particleMat = new THREE.MeshStandardMaterial({
-    color: 0x5eead4, transparent: true, opacity: 0.7
-});
+// === RAIN SYSTEM (forms the lake) ===
+const rainCount = 3000;
+const rainGeo = new THREE.BufferGeometry();
+const rainPositions = new Float32Array(rainCount * 3);
+const rainVelocities = new Float32Array(rainCount);
 
-function spawnWaterfallParticle() {
-    const mesh = new THREE.Mesh(particleGeo, particleMat.clone());
-    mesh.position.set(
-        (Math.random() - 0.5) * 30,
-        25 + Math.random() * 10,
-        (Math.random() - 0.5) * 30 - 10
-    );
-    mesh.userData = {
-        vel: new THREE.Vector3(
-            (Math.random() - 0.5) * 0.1,
-            -(Math.random() * 0.3 + 0.2),
-            (Math.random() - 0.5) * 0.1
-        ),
-        life: 1.0
-    };
-    scene.add(mesh);
-    waterfallParticles.push(mesh);
+for (let i = 0; i < rainCount; i++) {
+    rainPositions[i * 3] = (Math.random() - 0.5) * 100;     // x
+    rainPositions[i * 3 + 1] = Math.random() * 50 + 10;     // y
+    rainPositions[i * 3 + 2] = (Math.random() - 0.5) * 100; // z
+    rainVelocities[i] = 0.4 + Math.random() * 0.3;
+}
+rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPositions, 3));
+
+const rainMat = new THREE.PointsMaterial({
+    color: 0x99ccdd,
+    size: 0.15,
+    transparent: true,
+    opacity: 0.6,
+    sizeAttenuation: true
+});
+const rain = new THREE.Points(rainGeo, rainMat);
+scene.add(rain);
+
+function updateRain() {
+    const positions = rain.geometry.attributes.position.array;
+    for (let i = 0; i < rainCount; i++) {
+        positions[i * 3 + 1] -= rainVelocities[i];
+
+        // Reset drops that hit the water/ground level
+        if (positions[i * 3 + 1] < water.position.y) {
+            positions[i * 3] = (Math.random() - 0.5) * 100;
+            positions[i * 3 + 1] = 40 + Math.random() * 20;
+            positions[i * 3 + 2] = (Math.random() - 0.5) * 100;
+        }
+    }
+    rain.geometry.attributes.position.needsUpdate = true;
 }
 
-function updateWaterfallParticles() {
-    for (let i = waterfallParticles.length - 1; i >= 0; i--) {
-        const p = waterfallParticles[i];
-        p.position.add(p.userData.vel);
-        p.userData.vel.y -= 0.008; // gravity
-        p.userData.life -= 0.005;
-        p.material.opacity = p.userData.life * 0.7;
 
-        if (p.userData.life <= 0 || p.position.y < water.position.y) {
-            scene.remove(p);
-            p.geometry.dispose();
-            p.material.dispose();
-            waterfallParticles.splice(i, 1);
+// === RIPPLE RINGS (where rain hits water) ===
+const ripples = [];
+function spawnRipple() {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = Math.random() * lakeRadius * 0.9;
+    const ripple = new THREE.Mesh(
+        new THREE.RingGeometry(0.1, 0.3, 16),
+        new THREE.MeshBasicMaterial({ color: 0xaaddcc, transparent: true, opacity: 0.5, side: THREE.DoubleSide })
+    );
+    ripple.rotation.x = -Math.PI / 2;
+    ripple.position.set(Math.cos(angle) * dist, water.position.y + 0.05, Math.sin(angle) * dist);
+    ripple.userData = { life: 1.0, maxScale: 1 + Math.random() * 2 };
+    scene.add(ripple);
+    ripples.push(ripple);
+}
+
+function updateRipples(delta) {
+    for (let i = ripples.length - 1; i >= 0; i--) {
+        const r = ripples[i];
+        r.userData.life -= delta * 1.5;
+        const s = (1 - r.userData.life) * r.userData.maxScale + 0.2;
+        r.scale.set(s, s, s);
+        r.material.opacity = r.userData.life * 0.4;
+        r.position.y = water.position.y + 0.05;
+
+        if (r.userData.life <= 0) {
+            scene.remove(r);
+            r.geometry.dispose();
+            r.material.dispose();
+            ripples.splice(i, 1);
         }
     }
 }
 
 
 // === CAMERA ===
-camera.position.set(0, 20, 40);
+camera.position.set(0, 35, 60);
 camera.lookAt(0, 0, 0);
 
 // === GAME STATE ===
-const STATES = { WATERFALL: 0, FILLING: 1, BOAT_APPEAR: 2, PLAYING: 3, WON: 4 };
-let gameState = STATES.WATERFALL;
+const STATES = { RAINING: 0, FILLING: 1, BOAT_APPEAR: 2, PLAYING: 3, WON: 4 };
+let gameState = STATES.RAINING;
 let stateTime = 0;
 let clock = new THREE.Clock();
 
 // Boat physics
-let boatPhysics = {
-    angle: 0,
-    speed: 0,
-    bobPhase: 0
-};
+let boatPhysics = { angle: 0, speed: 0, bobPhase: 0 };
 
 // Controls
 let keys = { left: false, right: false, forward: false };
 
-// Pointer events for buttons
 const btnLeft = document.getElementById('btn-left');
 const btnFwd = document.getElementById('btn-fwd');
 const btnRight = document.getElementById('btn-right');
@@ -328,7 +440,6 @@ btnFwd.addEventListener('pointerdown', () => keys.forward = true);
 btnFwd.addEventListener('pointerup', () => keys.forward = false);
 btnFwd.addEventListener('pointerleave', () => keys.forward = false);
 
-// Keyboard
 document.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowLeft' || e.key === 'a') keys.left = true;
     if (e.key === 'ArrowRight' || e.key === 'd') keys.right = true;
@@ -349,22 +460,29 @@ function animate() {
     stateTime += delta;
 
     // Water shader animation
-    water.material.uniforms['time'].value += delta * 0.5;
+    if (water.position.y > -49) {
+        water.material.uniforms['time'].value += delta * 0.4;
+    }
+
+    // Always update rain
+    updateRain();
 
     switch (gameState) {
-        case STATES.WATERFALL: {
-            // Spawn falling water particles
-            for (let i = 0; i < 8; i++) spawnWaterfallParticle();
-            updateWaterfallParticles();
+        case STATES.RAINING: {
+            // Camera: wide establishing shot of forest in rain
+            camera.position.set(
+                Math.sin(stateTime * 0.1) * 5,
+                30 + Math.sin(stateTime * 0.2) * 2,
+                55
+            );
+            camera.lookAt(0, 0, 0);
+            renderer.toneMappingExposure = Math.min(stateTime * 0.15, 0.45);
 
-            // Camera looks down at the falling water
-            camera.position.set(0, 25, 35);
-            camera.lookAt(0, 5, 0);
+            // Spawn ripples on ground before water appears
+            if (Math.random() < 0.3) spawnRipple();
+            updateRipples(delta);
 
-            // Gradually reveal sun (exposure)
-            renderer.toneMappingExposure = Math.min(stateTime * 0.2, 0.5);
-
-            if (stateTime > 3.5) {
+            if (stateTime > 4.0) {
                 gameState = STATES.FILLING;
                 stateTime = 0;
             }
@@ -372,28 +490,25 @@ function animate() {
         }
 
         case STATES.FILLING: {
-            // Keep some particles
-            if (waterfallParticles.length < 60) {
-                for (let i = 0; i < 3; i++) spawnWaterfallParticle();
-            }
-            updateWaterfallParticles();
-
-            // Raise water level
-            const targetY = 0;
-            const fillDuration = 4.0;
+            // Water rises, forming the lake
+            const fillDuration = 5.0;
             const progress = Math.min(stateTime / fillDuration, 1);
-            water.position.y = THREE.MathUtils.lerp(-50, targetY, easeOutCubic(progress));
+            water.position.y = THREE.MathUtils.lerp(-8, 0, easeOutCubic(progress));
 
-            // Camera moves to game view
-            const camProgress = easeOutCubic(progress);
+            // Ripples on the rising water
+            if (Math.random() < 0.4) spawnRipple();
+            updateRipples(delta);
+
+            // Camera slowly descends to lake level
+            const camP = easeOutCubic(progress);
             camera.position.set(
-                THREE.MathUtils.lerp(0, -5, camProgress),
-                THREE.MathUtils.lerp(25, 15, camProgress),
-                THREE.MathUtils.lerp(35, 30, camProgress)
+                THREE.MathUtils.lerp(0, -8, camP),
+                THREE.MathUtils.lerp(30, 18, camP),
+                THREE.MathUtils.lerp(55, 45, camP)
             );
-            camera.lookAt(0, 0, 0);
+            camera.lookAt(0, THREE.MathUtils.lerp(0, -2, camP), 0);
 
-            renderer.toneMappingExposure = THREE.MathUtils.lerp(0.5, 0.6, progress);
+            renderer.toneMappingExposure = THREE.MathUtils.lerp(0.45, 0.55, progress);
 
             if (progress >= 1) {
                 gameState = STATES.BOAT_APPEAR;
@@ -402,22 +517,31 @@ function animate() {
             break;
         }
 
-        case STATES.BOAT_APPEAR: {
-            // Remove remaining particles
-            updateWaterfallParticles();
 
-            // Fade in boat
+        case STATES.BOAT_APPEAR: {
+            updateRipples(delta);
+            if (Math.random() < 0.2) spawnRipple();
+
             boat.visible = true;
             dock.visible = true;
-            const appearProgress = Math.min(stateTime / 2.0, 1);
-            boat.position.y = THREE.MathUtils.lerp(-3, 0.5, easeOutCubic(appearProgress));
+            const appearProgress = Math.min(stateTime / 2.5, 1);
+            boat.position.y = THREE.MathUtils.lerp(-2, 0.2, easeOutCubic(appearProgress));
 
-            // Bob the boat gently
+            // Bob gently
             boatPhysics.bobPhase += delta * 2;
-            boat.position.y += Math.sin(boatPhysics.bobPhase) * 0.15;
-            boat.rotation.z = Math.sin(boatPhysics.bobPhase * 0.7) * 0.03;
+            boat.position.y += Math.sin(boatPhysics.bobPhase) * 0.08;
+            boat.rotation.z = Math.sin(boatPhysics.bobPhase * 0.7) * 0.02;
 
-            if (stateTime > 2.5) {
+            // Camera pulls back to show boat + dock
+            const camP2 = easeOutCubic(appearProgress);
+            camera.position.set(
+                THREE.MathUtils.lerp(-8, -10, camP2),
+                THREE.MathUtils.lerp(18, 22, camP2),
+                THREE.MathUtils.lerp(45, 35, camP2)
+            );
+            camera.lookAt(0, 0, 0);
+
+            if (stateTime > 3.0) {
                 gameState = STATES.PLAYING;
                 stateTime = 0;
                 document.getElementById('ui-overlay').classList.add('visible');
@@ -430,25 +554,25 @@ function animate() {
 
         case STATES.PLAYING: {
             updateBoat(delta, elapsed);
-            updateCamera(delta);
+            updateCamera2(delta);
+            updateRipples(delta);
+            if (Math.random() < 0.1) spawnRipple();
             checkWin();
             break;
         }
 
         case STATES.WON: {
-            // Gentle bob
             boatPhysics.bobPhase += delta * 2;
-            boat.position.y = 0.5 + Math.sin(boatPhysics.bobPhase) * 0.1;
+            boat.position.y = 0.2 + Math.sin(boatPhysics.bobPhase) * 0.05;
+            updateRipples(delta);
             break;
         }
     }
 
-    // Animate flag
-    if (dock.visible) {
-        const flag = dock.getObjectByName('flag');
-        if (flag) {
-            flag.rotation.y = Math.sin(elapsed * 2) * 0.2;
-        }
+    // Animate boat flag
+    if (boat.visible) {
+        const boatFlag = boat.getObjectByName('boatFlag');
+        if (boatFlag) boatFlag.rotation.y = Math.sin(elapsed * 3) * 0.2;
     }
 
     // Animate oars when moving
@@ -465,9 +589,9 @@ function animate() {
 
 // === BOAT UPDATE ===
 function updateBoat(delta, elapsed) {
-    const turnSpeed = 2.0;
-    const accel = 8.0;
-    const friction = 0.96;
+    const turnSpeed = 2.2;
+    const accel = 6.0;
+    const friction = 0.95;
 
     if (keys.left) boatPhysics.angle += turnSpeed * delta;
     if (keys.right) boatPhysics.angle -= turnSpeed * delta;
@@ -475,43 +599,47 @@ function updateBoat(delta, elapsed) {
 
     boatPhysics.speed *= friction;
 
-    // Move boat
     boat.position.x += Math.sin(boatPhysics.angle) * boatPhysics.speed * delta;
     boat.position.z += Math.cos(boatPhysics.angle) * boatPhysics.speed * delta;
 
-    // Boundaries
-    boat.position.x = THREE.MathUtils.clamp(boat.position.x, -60, 60);
-    boat.position.z = THREE.MathUtils.clamp(boat.position.z, -60, 60);
+    // Keep boat within lake
+    const distFromCenter = Math.sqrt(boat.position.x ** 2 + boat.position.z ** 2);
+    if (distFromCenter > lakeRadius - 3) {
+        const pushBack = distFromCenter - (lakeRadius - 3);
+        const angle = Math.atan2(boat.position.x, boat.position.z);
+        boat.position.x -= Math.sin(angle) * pushBack;
+        boat.position.z -= Math.cos(angle) * pushBack;
+        boatPhysics.speed *= 0.5;
+    }
 
-    // Rotation
     boat.rotation.y = boatPhysics.angle;
 
     // Bobbing
     boatPhysics.bobPhase += delta * 2.5;
-    boat.position.y = 0.5 + Math.sin(boatPhysics.bobPhase) * 0.2;
-    boat.rotation.z = Math.sin(boatPhysics.bobPhase * 0.7) * 0.03;
-    boat.rotation.x = Math.sin(boatPhysics.bobPhase * 0.5) * 0.02;
+    boat.position.y = 0.2 + Math.sin(boatPhysics.bobPhase) * 0.1;
+    boat.rotation.z = Math.sin(boatPhysics.bobPhase * 0.7) * 0.02;
+    boat.rotation.x = Math.sin(boatPhysics.bobPhase * 0.5) * 0.015;
 }
 
-// === CAMERA FOLLOW ===
-function updateCamera(delta) {
+// === CAMERA FOLLOW (higher, more zoomed out) ===
+function updateCamera2(delta) {
     const offset = new THREE.Vector3(
-        -Math.sin(boatPhysics.angle) * 12,
-        10,
-        -Math.cos(boatPhysics.angle) * 12
+        -Math.sin(boatPhysics.angle) * 18,
+        14,
+        -Math.cos(boatPhysics.angle) * 18
     );
     const targetPos = boat.position.clone().add(offset);
-    camera.position.lerp(targetPos, delta * 2);
+    camera.position.lerp(targetPos, delta * 1.8);
 
     const lookTarget = boat.position.clone();
-    lookTarget.y += 2;
+    lookTarget.y += 1;
     camera.lookAt(lookTarget);
 }
 
 // === WIN CHECK ===
 function checkWin() {
     const dist = boat.position.distanceTo(dock.position);
-    if (dist < 8) {
+    if (dist < 6) {
         gameState = STATES.WON;
         document.getElementById('ui-overlay').classList.remove('visible');
         setTimeout(() => {
