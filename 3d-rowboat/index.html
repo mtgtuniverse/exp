@@ -203,77 +203,170 @@ for (let i = 0; i < 30; i++) {
 }
 
 
-// === BOAT (smaller, visible from distance) ===
+// === BOAT (Swedish "eka" - flat-bottomed wooden rowboat) ===
 function createBoat() {
     const group = new THREE.Group();
 
-    // Hull
-    const hullShape = new THREE.Shape();
-    hullShape.moveTo(-1, 0);
-    hullShape.quadraticCurveTo(-1.3, 0.6, -0.9, 1.1);
-    hullShape.lineTo(0.9, 1.1);
-    hullShape.quadraticCurveTo(1.3, 0.6, 1, 0);
-    hullShape.lineTo(-1, 0);
+    // Wood materials
+    const hullMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2f, roughness: 0.85, metalness: 0 });
+    const plankMat = new THREE.MeshStandardMaterial({ color: 0x8c6b4a, roughness: 0.8, metalness: 0 });
+    const trimMat = new THREE.MeshStandardMaterial({ color: 0x4a3520, roughness: 0.75, metalness: 0 });
+    const oarMat = new THREE.MeshStandardMaterial({ color: 0x7a5c3a, roughness: 0.7 });
 
-    const extrudeSettings = { depth: 3.5, bevelEnabled: true, bevelThickness: 0.1, bevelSize: 0.05 };
-    const hullGeo = new THREE.ExtrudeGeometry(hullShape, extrudeSettings);
-    const hullMat = new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.7 });
-    const hull = new THREE.Mesh(hullGeo, hullMat);
-    hull.rotation.x = -Math.PI / 2;
-    hull.position.set(0, -0.3, -1.75);
-    hull.castShadow = true;
-    group.add(hull);
+    // === HULL (flat bottom, wide beam, tapered ends - typical eka shape) ===
+    // Bottom (flat plank)
+    const bottomGeo = new THREE.BoxGeometry(1.6, 0.08, 4.2);
+    const bottom = new THREE.Mesh(bottomGeo, hullMat);
+    bottom.position.set(0, 0, 0);
+    bottom.castShadow = true;
+    group.add(bottom);
 
-    // Seat
-    const seatGeo = new THREE.BoxGeometry(1.6, 0.1, 0.4);
-    const seatMat = new THREE.MeshStandardMaterial({ color: 0xa0704a, roughness: 0.7 });
-    const seat = new THREE.Mesh(seatGeo, seatMat);
-    seat.position.set(0, 0.5, 0);
-    group.add(seat);
+    // Side planks (angled outward like a real eka - wider at top)
+    const sideShape = new THREE.Shape();
+    sideShape.moveTo(0, 0);
+    sideShape.lineTo(4.2, 0);
+    sideShape.lineTo(3.8, 0.7);
+    sideShape.lineTo(0.4, 0.7);
+    sideShape.closePath();
 
-    // Oars
-    const oarMat = new THREE.MeshStandardMaterial({ color: 0x6b4226, roughness: 0.6 });
-    const oarShaftGeo = new THREE.CylinderGeometry(0.04, 0.04, 3.5, 6);
-    const oarBladeGeo = new THREE.BoxGeometry(0.35, 0.05, 0.8);
+    const sideGeo = new THREE.ExtrudeGeometry(sideShape, { depth: 0.06, bevelEnabled: false });
 
+    // Left side
+    const leftSide = new THREE.Mesh(sideGeo, plankMat);
+    leftSide.rotation.y = Math.PI / 2;
+    leftSide.rotation.x = -0.15; // Slight flare outward
+    leftSide.position.set(-0.82, 0.04, 2.1);
+    leftSide.castShadow = true;
+    group.add(leftSide);
+
+    // Right side
+    const rightSide = new THREE.Mesh(sideGeo, plankMat);
+    rightSide.rotation.y = -Math.PI / 2;
+    rightSide.rotation.x = -0.15;
+    rightSide.position.set(0.88, 0.04, -2.1);
+    rightSide.castShadow = true;
+    group.add(rightSide);
+
+    // Stern (back - flat, wider)
+    const sternGeo = new THREE.BoxGeometry(1.8, 0.65, 0.08);
+    const stern = new THREE.Mesh(sternGeo, trimMat);
+    stern.position.set(0, 0.35, -2.1);
+    stern.castShadow = true;
+    group.add(stern);
+
+    // Bow (front - pointed/narrow transom)
+    const bowShape = new THREE.Shape();
+    bowShape.moveTo(-0.6, 0);
+    bowShape.lineTo(0.6, 0);
+    bowShape.lineTo(0.1, 0.7);
+    bowShape.lineTo(-0.1, 0.7);
+    bowShape.closePath();
+    const bowGeo = new THREE.ExtrudeGeometry(bowShape, { depth: 0.06, bevelEnabled: false });
+    const bow = new THREE.Mesh(bowGeo, trimMat);
+    bow.rotation.y = Math.PI;
+    bow.position.set(-0.03, 0.0, 2.07);
+    bow.castShadow = true;
+    group.add(bow);
+
+    // Gunwale (reling/top rail along sides)
+    const railGeo = new THREE.BoxGeometry(0.08, 0.06, 4.4);
+    const leftRail = new THREE.Mesh(railGeo, trimMat);
+    leftRail.position.set(-0.9, 0.72, 0);
+    group.add(leftRail);
+    const rightRail = new THREE.Mesh(railGeo, trimMat);
+    rightRail.position.set(0.9, 0.72, 0);
+    group.add(rightRail);
+
+    // === TOFTER (seats/thwarts - 2 seats typical for eka) ===
+    const seatGeo = new THREE.BoxGeometry(1.6, 0.07, 0.45);
+    const seatMat2 = new THREE.MeshStandardMaterial({ color: 0x9e7b5a, roughness: 0.75 });
+
+    // Front seat (roddarbänk)
+    const frontSeat = new THREE.Mesh(seatGeo, seatMat2);
+    frontSeat.position.set(0, 0.55, 0.6);
+    frontSeat.castShadow = true;
+    group.add(frontSeat);
+
+    // Back seat
+    const backSeat = new THREE.Mesh(seatGeo, seatMat2);
+    backSeat.position.set(0, 0.55, -1.0);
+    backSeat.castShadow = true;
+    group.add(backSeat);
+
+    // === RIBS (spant - structural cross pieces visible inside) ===
+    const ribGeo = new THREE.BoxGeometry(1.5, 0.04, 0.08);
+    const ribMat = new THREE.MeshStandardMaterial({ color: 0x5c4030, roughness: 0.9 });
+    [-1.5, -0.5, 0.5, 1.5].forEach(z => {
+        const rib = new THREE.Mesh(ribGeo, ribMat);
+        rib.position.set(0, 0.06, z);
+        group.add(rib);
+    });
+
+    // === OARLOCKS (årtullar - metal pegs on gunwale) ===
+    const arlockMat = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.4, metalness: 0.8 });
+    const arlockGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.2, 8);
+
+    const leftArlock = new THREE.Mesh(arlockGeo, arlockMat);
+    leftArlock.position.set(-0.9, 0.82, 0.3);
+    group.add(leftArlock);
+    const rightArlock = new THREE.Mesh(arlockGeo, arlockMat);
+    rightArlock.position.set(0.9, 0.82, 0.3);
+    group.add(rightArlock);
+
+    // === OARS (åror - realistic proportions) ===
+    const oarShaftGeo = new THREE.CylinderGeometry(0.03, 0.035, 4.0, 8);
+
+    // Oar blade (leaf-shaped, thinner)
+    const bladeShape = new THREE.Shape();
+    bladeShape.moveTo(0, -0.5);
+    bladeShape.quadraticCurveTo(0.2, -0.3, 0.2, 0);
+    bladeShape.quadraticCurveTo(0.2, 0.3, 0, 0.5);
+    bladeShape.quadraticCurveTo(-0.2, 0.3, -0.2, 0);
+    bladeShape.quadraticCurveTo(-0.2, -0.3, 0, -0.5);
+    const bladeGeo = new THREE.ExtrudeGeometry(bladeShape, { depth: 0.03, bevelEnabled: false });
+
+    // Left oar
     const leftOar = new THREE.Group();
     const lShaft = new THREE.Mesh(oarShaftGeo, oarMat);
     lShaft.rotation.z = Math.PI / 2;
     leftOar.add(lShaft);
-    const lBlade = new THREE.Mesh(oarBladeGeo, oarMat);
-    lBlade.position.set(-1.8, 0, 0);
+    const lBlade = new THREE.Mesh(bladeGeo, oarMat);
+    lBlade.position.set(-2.0, 0, 0);
+    lBlade.rotation.y = Math.PI / 2;
     leftOar.add(lBlade);
-    leftOar.position.set(-0.8, 0.6, 0);
+    leftOar.position.set(-0.9, 0.8, 0.3);
     leftOar.name = 'leftOar';
     group.add(leftOar);
 
+    // Right oar
     const rightOar = new THREE.Group();
     const rShaft = new THREE.Mesh(oarShaftGeo, oarMat);
     rShaft.rotation.z = Math.PI / 2;
     rightOar.add(rShaft);
-    const rBlade = new THREE.Mesh(oarBladeGeo, oarMat);
-    rBlade.position.set(1.8, 0, 0);
+    const rBlade = new THREE.Mesh(bladeGeo, oarMat);
+    rBlade.position.set(2.0, 0, 0);
+    rBlade.rotation.y = Math.PI / 2;
     rightOar.add(rBlade);
-    rightOar.position.set(0.8, 0.6, 0);
+    rightOar.position.set(0.9, 0.8, 0.3);
     rightOar.name = 'rightOar';
     group.add(rightOar);
 
-    // Small red flag on back (visibility from distance)
-    const flagPoleGeo = new THREE.CylinderGeometry(0.02, 0.02, 2, 6);
-    const flagPole = new THREE.Mesh(flagPoleGeo, oarMat);
-    flagPole.position.set(0, 1.2, -1.5);
+    // === RED FLAG (synlighet på håll) ===
+    const flagPoleGeo = new THREE.CylinderGeometry(0.02, 0.02, 1.5, 6);
+    const flagPole = new THREE.Mesh(flagPoleGeo, trimMat);
+    flagPole.position.set(0, 1.0, -1.8);
     group.add(flagPole);
 
-    const flagGeo = new THREE.PlaneGeometry(0.8, 0.5);
-    const flagMat = new THREE.MeshStandardMaterial({
-        color: 0xe63946, side: THREE.DoubleSide, emissive: 0xe63946, emissiveIntensity: 0.3
+    const flagGeo = new THREE.PlaneGeometry(0.6, 0.4);
+    const flagMat2 = new THREE.MeshStandardMaterial({
+        color: 0xcc2200, side: THREE.DoubleSide, emissive: 0xcc2200, emissiveIntensity: 0.25
     });
-    const flag = new THREE.Mesh(flagGeo, flagMat);
-    flag.position.set(0.4, 1.8, -1.5);
+    const flag = new THREE.Mesh(flagGeo, flagMat2);
+    flag.position.set(0.3, 1.5, -1.8);
     flag.name = 'boatFlag';
     group.add(flag);
 
-    group.scale.set(0.5, 0.5, 0.5);
+    group.scale.set(0.55, 0.55, 0.55);
     return group;
 }
 
