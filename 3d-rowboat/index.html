@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>3D Roddbåt Experiment</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; background: #0a1628; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+        #canvas-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; }
+        #ui-overlay {
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 14px; z-index: 10; opacity: 0;
+            transition: opacity 0.8s ease;
+        }
+        #ui-overlay.visible { opacity: 1; }
+        .ctrl-btn {
+            width: 64px; height: 64px; border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.6);
+            background: rgba(13, 148, 136, 0.6); color: white;
+            font-size: 24px; display: flex; align-items: center;
+            justify-content: center; cursor: pointer;
+            user-select: none; -webkit-user-select: none;
+            touch-action: manipulation; backdrop-filter: blur(6px);
+            transition: transform 0.1s, background 0.15s;
+        }
+        .ctrl-btn:active { transform: scale(0.88); background: rgba(13,148,136,0.95); }
+</style>
+</head>
+<body>
+<div id="canvas-container"></div>
+<div id="ui-overlay">
+    <button class="ctrl-btn" id="btn-left">↶</button>
+    <button class="ctrl-btn" id="btn-fwd">▲</button>
+    <button class="ctrl-btn" id="btn-right">↷</button>
+</div>
+
+
+<div id="instruction" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+    color:white;font-size:20px;font-weight:500;text-align:center;z-index:20;opacity:0;
+    transition:opacity 0.6s;text-shadow:0 2px 12px rgba(0,0,0,0.7);
+    padding:20px 32px;background:rgba(0,0,0,0.35);border-radius:14px;backdrop-filter:blur(6px);">
+    Ro båten till bryggan! 🏁
+</div>
+<div id="win-screen" style="position:fixed;top:0;left:0;width:100%;height:100%;
+    display:none;align-items:center;justify-content:center;flex-direction:column;
+    z-index:30;background:rgba(10,22,40,0.85);backdrop-filter:blur(8px);">
+    <h1 style="color:#5eead4;font-size:36px;margin-bottom:12px;">Framme! 🎉</h1>
+    <p style="color:rgba(255,255,255,0.7);font-size:16px;">Du navigerade roddbåten till bryggan.</p>
+    <button onclick="location.reload()" style="margin-top:24px;padding:12px 32px;
+        border-radius:8px;border:none;background:#0d9488;color:white;font-size:16px;
+        cursor:pointer;">Spela igen</button>
+</div>
+
+<script type="importmap">
+{
+    "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+    }
+}
+</script>
+
+
+<script type="module">
+import * as THREE from 'three';
+import { Water } from 'three/addons/objects/Water.js';
+import { Sky } from 'three/addons/objects/Sky.js';
+
+// === SCENE SETUP ===
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 2000);
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.5;
+document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+// === LIGHTING ===
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+scene.add(ambientLight);
+const dirLight = new THREE.DirectionalLight(0xfff4e0, 1.2);
+dirLight.position.set(-1, 1.5, 1);
+scene.add(dirLight);
+
+
+// === SKY ===
+const sky = new Sky();
+sky.scale.setScalar(10000);
+scene.add(sky);
+const skyUniforms = sky.material.uniforms;
+skyUniforms['turbidity'].value = 4;
+skyUniforms['rayleigh'].value = 2;
+skyUniforms['mieCoefficient'].value = 0.005;
+skyUniforms['mieDirectionalG'].value = 0.8;
+const sun = new THREE.Vector3();
+const phi = THREE.MathUtils.degToRad(88);
+const theta = THREE.MathUtils.degToRad(180);
+sun.setFromSphericalCoords(1, phi, theta);
+skyUniforms['sunPosition'].value.copy(sun);
+
+// === WATER ===
+const waterGeometry = new THREE.PlaneGeometry(800, 800, 128, 128);
+const water = new Water(waterGeometry, {
+    textureWidth: 512,
+    textureHeight: 512,
+    waterNormals: new THREE.TextureLoader().load(
+        'https://cdn.jsdelivr.net/npm/three@0.164.1/examples/textures/waternormals.jpg',
+        (texture) => { texture.wrapS = texture.wrapT = THREE.RepeatWrapping; }
+    ),
+    sunDirection: new THREE.Vector3(sun.x, sun.y, sun.z).normalize(),
+    sunColor: 0xffffff,
+    waterColor: 0x0d7377,
+    distortionScale: 3.7,
+    fog: scene.fog !== undefined
+});
+water.rotation.x = -Math.PI / 2;
+water.position.y = -50; // Start hidden below view
+scene.add(water);
+
+
+// === BOAT (procedural 3D) ===
+function createBoat() {
+    const group = new THREE.Group();
+
+    // Hull
+    const hullShape = new THREE.Shape();
+    hullShape.moveTo(-2, 0);
+    hullShape.quadraticCurveTo(-2.5, 1.2, -1.8, 2.2);
+    hullShape.lineTo(1.8, 2.2);
+    hullShape.quadraticCurveTo(2.5, 1.2, 2, 0);
+    hullShape.lineTo(-2, 0);
+
+    const extrudeSettings = { depth: 6, bevelEnabled: true, bevelThickness: 0.2, bevelSize: 0.1 };
+    const hullGeo = new THREE.ExtrudeGeometry(hullShape, extrudeSettings);
+    const hullMat = new THREE.MeshStandardMaterial({ color: 0x5c3317, roughness: 0.8 });
+    const hull = new THREE.Mesh(hullGeo, hullMat);
+    hull.rotation.x = -Math.PI / 2;
+    hull.position.set(0, -0.5, -3);
+    group.add(hull);
+
+    // Seats
+    const seatGeo = new THREE.BoxGeometry(3.2, 0.2, 0.8);
+    const seatMat = new THREE.MeshStandardMaterial({ color: 0x8b5e3c, roughness: 0.7 });
+    const seat1 = new THREE.Mesh(seatGeo, seatMat);
+    seat1.position.set(0, 1.2, -1);
+    group.add(seat1);
+    const seat2 = new THREE.Mesh(seatGeo, seatMat);
+    seat2.position.set(0, 1.2, 1.5);
+    group.add(seat2);
+
+    // Oars
+    const oarMat = new THREE.MeshStandardMaterial({ color: 0x6b4226, roughness: 0.6 });
+    const oarShaftGeo = new THREE.CylinderGeometry(0.06, 0.06, 5, 8);
+    const oarBladeGeo = new THREE.BoxGeometry(0.5, 0.08, 1.2);
+
+    // Left oar
+    const leftOar = new THREE.Group();
+    const lShaft = new THREE.Mesh(oarShaftGeo, oarMat);
+    lShaft.rotation.z = Math.PI / 2;
+    leftOar.add(lShaft);
+    const lBlade = new THREE.Mesh(oarBladeGeo, oarMat);
+    lBlade.position.set(-2.5, 0, 0);
+    leftOar.add(lBlade);
+    leftOar.position.set(-1.6, 1.4, 0);
+    leftOar.name = 'leftOar';
+    group.add(leftOar);
+
+    // Right oar
+    const rightOar = new THREE.Group();
+    const rShaft = new THREE.Mesh(oarShaftGeo, oarMat);
+    rShaft.rotation.z = Math.PI / 2;
+    rightOar.add(rShaft);
+    const rBlade = new THREE.Mesh(oarBladeGeo, oarMat);
+    rBlade.position.set(2.5, 0, 0);
+    rightOar.add(rBlade);
+    rightOar.position.set(1.6, 1.4, 0);
+    rightOar.name = 'rightOar';
+    group.add(rightOar);
+
+    group.scale.set(0.8, 0.8, 0.8);
+    return group;
+}
+
+const boat = createBoat();
+boat.position.set(0, 0, 0);
+boat.visible = false;
+scene.add(boat);
+
+
+// === DOCK (goal) ===
+function createDock() {
+    const group = new THREE.Group();
+    const woodMat = new THREE.MeshStandardMaterial({ color: 0x6b4226, roughness: 0.9 });
+    const darkWoodMat = new THREE.MeshStandardMaterial({ color: 0x3e2412, roughness: 0.85 });
+
+    // Platform planks
+    for (let i = 0; i < 5; i++) {
+        const plank = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.2, 6), woodMat);
+        plank.position.set(i * 1.3 - 2.6, 1.5, 0);
+        group.add(plank);
+    }
+
+    // Poles
+    const poleGeo = new THREE.CylinderGeometry(0.15, 0.18, 5, 8);
+    const positions = [[-3, 0, -2.5], [-3, 0, 2.5], [3, 0, -2.5], [3, 0, 2.5]];
+    positions.forEach(([x, y, z]) => {
+        const pole = new THREE.Mesh(poleGeo, darkWoodMat);
+        pole.position.set(x, y, z);
+        group.add(pole);
+    });
+
+    // Flag
+    const flagPoleGeo = new THREE.CylinderGeometry(0.05, 0.05, 4, 8);
+    const flagPole = new THREE.Mesh(flagPoleGeo, darkWoodMat);
+    flagPole.position.set(0, 3.5, -2.5);
+    group.add(flagPole);
+
+    const flagGeo = new THREE.PlaneGeometry(1.8, 1);
+    const flagMat = new THREE.MeshStandardMaterial({
+        color: 0x0d9488, side: THREE.DoubleSide, emissive: 0x0d9488, emissiveIntensity: 0.2
+    });
+    const flag = new THREE.Mesh(flagGeo, flagMat);
+    flag.position.set(1, 4.5, -2.5);
+    flag.name = 'flag';
+    group.add(flag);
+
+    // Lantern (glowing sphere)
+    const lanternGeo = new THREE.SphereGeometry(0.25, 16, 16);
+    const lanternMat = new THREE.MeshStandardMaterial({
+        color: 0xffdd44, emissive: 0xffaa00, emissiveIntensity: 1.5
+    });
+    const lantern = new THREE.Mesh(lanternGeo, lanternMat);
+    lantern.position.set(0, 5.8, -2.5);
+    group.add(lantern);
+
+    // Point light from lantern
+    const lanternLight = new THREE.PointLight(0xffaa00, 3, 20);
+    lanternLight.position.copy(lantern.position);
+    group.add(lanternLight);
+
+    group.position.set(40, -1, -30);
+    return group;
+}
+
+const dock = createDock();
+dock.visible = false;
+scene.add(dock);
+
+
+// === WATERFALL PARTICLES ===
+const waterfallParticles = [];
+const particleGeo = new THREE.SphereGeometry(0.12, 6, 6);
+const particleMat = new THREE.MeshStandardMaterial({
+    color: 0x5eead4, transparent: true, opacity: 0.7
+});
+
+function spawnWaterfallParticle() {
+    const mesh = new THREE.Mesh(particleGeo, particleMat.clone());
+    mesh.position.set(
+        (Math.random() - 0.5) * 30,
+        25 + Math.random() * 10,
+        (Math.random() - 0.5) * 30 - 10
+    );
+    mesh.userData = {
+        vel: new THREE.Vector3(
+            (Math.random() - 0.5) * 0.1,
+            -(Math.random() * 0.3 + 0.2),
+            (Math.random() - 0.5) * 0.1
+        ),
+        life: 1.0
+    };
+    scene.add(mesh);
+    waterfallParticles.push(mesh);
+}
+
+function updateWaterfallParticles() {
+    for (let i = waterfallParticles.length - 1; i >= 0; i--) {
+        const p = waterfallParticles[i];
+        p.position.add(p.userData.vel);
+        p.userData.vel.y -= 0.008; // gravity
+        p.userData.life -= 0.005;
+        p.material.opacity = p.userData.life * 0.7;
+
+        if (p.userData.life <= 0 || p.position.y < water.position.y) {
+            scene.remove(p);
+            p.geometry.dispose();
+            p.material.dispose();
+            waterfallParticles.splice(i, 1);
+        }
+    }
+}
+
+
+// === CAMERA ===
+camera.position.set(0, 20, 40);
+camera.lookAt(0, 0, 0);
+
+// === GAME STATE ===
+const STATES = { WATERFALL: 0, FILLING: 1, BOAT_APPEAR: 2, PLAYING: 3, WON: 4 };
+let gameState = STATES.WATERFALL;
+let stateTime = 0;
+let clock = new THREE.Clock();
+
+// Boat physics
+let boatPhysics = {
+    angle: 0,
+    speed: 0,
+    bobPhase: 0
+};
+
+// Controls
+let keys = { left: false, right: false, forward: false };
+
+// Pointer events for buttons
+const btnLeft = document.getElementById('btn-left');
+const btnFwd = document.getElementById('btn-fwd');
+const btnRight = document.getElementById('btn-right');
+
+btnLeft.addEventListener('pointerdown', () => keys.left = true);
+btnLeft.addEventListener('pointerup', () => keys.left = false);
+btnLeft.addEventListener('pointerleave', () => keys.left = false);
+btnRight.addEventListener('pointerdown', () => keys.right = true);
+btnRight.addEventListener('pointerup', () => keys.right = false);
+btnRight.addEventListener('pointerleave', () => keys.right = false);
+btnFwd.addEventListener('pointerdown', () => keys.forward = true);
+btnFwd.addEventListener('pointerup', () => keys.forward = false);
+btnFwd.addEventListener('pointerleave', () => keys.forward = false);
+
+// Keyboard
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft' || e.key === 'a') keys.left = true;
+    if (e.key === 'ArrowRight' || e.key === 'd') keys.right = true;
+    if (e.key === 'ArrowUp' || e.key === 'w') keys.forward = true;
+});
+document.addEventListener('keyup', (e) => {
+    if (e.key === 'ArrowLeft' || e.key === 'a') keys.left = false;
+    if (e.key === 'ArrowRight' || e.key === 'd') keys.right = false;
+    if (e.key === 'ArrowUp' || e.key === 'w') keys.forward = false;
+});
+
+
+// === ANIMATION LOOP ===
+function animate() {
+    requestAnimationFrame(animate);
+    const delta = clock.getDelta();
+    const elapsed = clock.getElapsedTime();
+    stateTime += delta;
+
+    // Water shader animation
+    water.material.uniforms['time'].value += delta * 0.5;
+
+    switch (gameState) {
+        case STATES.WATERFALL: {
+            // Spawn falling water particles
+            for (let i = 0; i < 8; i++) spawnWaterfallParticle();
+            updateWaterfallParticles();
+
+            // Camera looks down at the falling water
+            camera.position.set(0, 25, 35);
+            camera.lookAt(0, 5, 0);
+
+            // Gradually reveal sun (exposure)
+            renderer.toneMappingExposure = Math.min(stateTime * 0.2, 0.5);
+
+            if (stateTime > 3.5) {
+                gameState = STATES.FILLING;
+                stateTime = 0;
+            }
+            break;
+        }
+
+        case STATES.FILLING: {
+            // Keep some particles
+            if (waterfallParticles.length < 60) {
+                for (let i = 0; i < 3; i++) spawnWaterfallParticle();
+            }
+            updateWaterfallParticles();
+
+            // Raise water level
+            const targetY = 0;
+            const fillDuration = 4.0;
+            const progress = Math.min(stateTime / fillDuration, 1);
+            water.position.y = THREE.MathUtils.lerp(-50, targetY, easeOutCubic(progress));
+
+            // Camera moves to game view
+            const camProgress = easeOutCubic(progress);
+            camera.position.set(
+                THREE.MathUtils.lerp(0, -5, camProgress),
+                THREE.MathUtils.lerp(25, 15, camProgress),
+                THREE.MathUtils.lerp(35, 30, camProgress)
+            );
+            camera.lookAt(0, 0, 0);
+
+            renderer.toneMappingExposure = THREE.MathUtils.lerp(0.5, 0.6, progress);
+
+            if (progress >= 1) {
+                gameState = STATES.BOAT_APPEAR;
+                stateTime = 0;
+            }
+            break;
+        }
+
+        case STATES.BOAT_APPEAR: {
+            // Remove remaining particles
+            updateWaterfallParticles();
+
+            // Fade in boat
+            boat.visible = true;
+            dock.visible = true;
+            const appearProgress = Math.min(stateTime / 2.0, 1);
+            boat.position.y = THREE.MathUtils.lerp(-3, 0.5, easeOutCubic(appearProgress));
+
+            // Bob the boat gently
+            boatPhysics.bobPhase += delta * 2;
+            boat.position.y += Math.sin(boatPhysics.bobPhase) * 0.15;
+            boat.rotation.z = Math.sin(boatPhysics.bobPhase * 0.7) * 0.03;
+
+            if (stateTime > 2.5) {
+                gameState = STATES.PLAYING;
+                stateTime = 0;
+                document.getElementById('ui-overlay').classList.add('visible');
+                const instr = document.getElementById('instruction');
+                instr.style.opacity = '1';
+                setTimeout(() => { instr.style.opacity = '0'; }, 4000);
+            }
+            break;
+        }
+
+        case STATES.PLAYING: {
+            updateBoat(delta, elapsed);
+            updateCamera(delta);
+            checkWin();
+            break;
+        }
+
+        case STATES.WON: {
+            // Gentle bob
+            boatPhysics.bobPhase += delta * 2;
+            boat.position.y = 0.5 + Math.sin(boatPhysics.bobPhase) * 0.1;
+            break;
+        }
+    }
+
+    // Animate flag
+    if (dock.visible) {
+        const flag = dock.getObjectByName('flag');
+        if (flag) {
+            flag.rotation.y = Math.sin(elapsed * 2) * 0.2;
+        }
+    }
+
+    // Animate oars when moving
+    if (boat.visible && boatPhysics.speed > 0.05) {
+        const leftOar = boat.getObjectByName('leftOar');
+        const rightOar = boat.getObjectByName('rightOar');
+        if (leftOar) leftOar.rotation.x = Math.sin(elapsed * 4) * 0.4;
+        if (rightOar) rightOar.rotation.x = -Math.sin(elapsed * 4) * 0.4;
+    }
+
+    renderer.render(scene, camera);
+}
+
+
+// === BOAT UPDATE ===
+function updateBoat(delta, elapsed) {
+    const turnSpeed = 2.0;
+    const accel = 8.0;
+    const friction = 0.96;
+
+    if (keys.left) boatPhysics.angle += turnSpeed * delta;
+    if (keys.right) boatPhysics.angle -= turnSpeed * delta;
+    if (keys.forward) boatPhysics.speed += accel * delta;
+
+    boatPhysics.speed *= friction;
+
+    // Move boat
+    boat.position.x += Math.sin(boatPhysics.angle) * boatPhysics.speed * delta;
+    boat.position.z += Math.cos(boatPhysics.angle) * boatPhysics.speed * delta;
+
+    // Boundaries
+    boat.position.x = THREE.MathUtils.clamp(boat.position.x, -60, 60);
+    boat.position.z = THREE.MathUtils.clamp(boat.position.z, -60, 60);
+
+    // Rotation
+    boat.rotation.y = boatPhysics.angle;
+
+    // Bobbing
+    boatPhysics.bobPhase += delta * 2.5;
+    boat.position.y = 0.5 + Math.sin(boatPhysics.bobPhase) * 0.2;
+    boat.rotation.z = Math.sin(boatPhysics.bobPhase * 0.7) * 0.03;
+    boat.rotation.x = Math.sin(boatPhysics.bobPhase * 0.5) * 0.02;
+}
+
+// === CAMERA FOLLOW ===
+function updateCamera(delta) {
+    const offset = new THREE.Vector3(
+        -Math.sin(boatPhysics.angle) * 12,
+        10,
+        -Math.cos(boatPhysics.angle) * 12
+    );
+    const targetPos = boat.position.clone().add(offset);
+    camera.position.lerp(targetPos, delta * 2);
+
+    const lookTarget = boat.position.clone();
+    lookTarget.y += 2;
+    camera.lookAt(lookTarget);
+}
+
+// === WIN CHECK ===
+function checkWin() {
+    const dist = boat.position.distanceTo(dock.position);
+    if (dist < 8) {
+        gameState = STATES.WON;
+        document.getElementById('ui-overlay').classList.remove('visible');
+        setTimeout(() => {
+            document.getElementById('win-screen').style.display = 'flex';
+        }, 1500);
+    }
+}
+
+// === EASING ===
+function easeOutCubic(t) {
+    return 1 - Math.pow(1 - t, 3);
+}
+
+// === RESIZE ===
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// === START ===
+animate();
+</script>
+</body>
+</html>
