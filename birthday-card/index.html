@@ -67,6 +67,13 @@
   .copy-btn.done { background: #16a34a; }
   .preview-link { display: inline-block; margin-top: 14px; color: #be123c; font-weight: 600; text-decoration: none; }
   .preview-link:hover { text-decoration: underline; }
+  .qr-wrap { margin-top: 20px; text-align: center; }
+  .qr-wrap p { margin: 0 0 10px; font-size: 14px; color: #64748b; }
+  #qrcode {
+    display: inline-block; padding: 14px; background: #fff;
+    border: 2px solid #e2e8f0; border-radius: 16px; line-height: 0;
+  }
+  #qrcode img, #qrcode canvas { display: block; }
 </style>
 </head>
 <body>
@@ -104,8 +111,15 @@
         <button class="copy-btn" id="copyBtn">Kopiera</button>
       </div>
       <a class="preview-link" id="previewLink" target="_blank" rel="noopener">👀 Förhandsvisa kortet</a>
+
+      <div class="qr-wrap">
+        <p>…eller låt kompisen scanna QR-koden 📷</p>
+        <div id="qrcode"></div>
+      </div>
     </div>
   </div>
+
+  <script src="https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs@04f46c6a0708418cb7b96fc563eacae0fbf77674/qrcode.min.js"></script>
 
 <script>
   let chosenEmoji = "🎂";
@@ -141,7 +155,26 @@
     linkOut.value = url;
     document.getElementById("previewLink").href = url;
     document.getElementById("result").classList.add("show");
+
+    renderQR(url);
   });
+
+  function renderQR(url) {
+    const container = document.getElementById("qrcode");
+    container.innerHTML = "";
+    if (typeof QRCode === "undefined") {
+      container.innerHTML = "<p style='color:#94a3b8;font-size:13px'>QR-koden kunde inte laddas (kräver internet).</p>";
+      return;
+    }
+    new QRCode(container, {
+      text: url,
+      width: 180,
+      height: 180,
+      colorDark: "#be123c",
+      colorLight: "#ffffff",
+      correctLevel: QRCode.CorrectLevel.L
+    });
+  }
 
   const copyBtn = document.getElementById("copyBtn");
   copyBtn.addEventListener("click", async () => {
