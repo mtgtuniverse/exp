@@ -74,6 +74,14 @@
     border: 2px solid #e2e8f0; border-radius: 16px; line-height: 0;
   }
   #qrcode img, #qrcode canvas { display: block; }
+  .qr-actions { display: flex; gap: 8px; justify-content: center; margin-top: 12px; }
+  .qr-btn {
+    border: none; border-radius: 10px; padding: 10px 16px; font-weight: 600;
+    font-size: 14px; cursor: pointer; background: #0d9488; color: #fff;
+    transition: background .15s;
+  }
+  .qr-btn:hover { background: #0f766e; }
+  .qr-btn.done { background: #16a34a; }
 </style>
 </head>
 <body>
@@ -115,6 +123,10 @@
       <div class="qr-wrap">
         <p>…eller låt kompisen scanna QR-koden 📷</p>
         <div id="qrcode"></div>
+        <div class="qr-actions">
+          <button type="button" class="qr-btn" id="copyQrBtn">Kopiera QR-kod</button>
+          <button type="button" class="qr-btn" id="dlQrBtn">Ladda ner</button>
+        </div>
       </div>
     </div>
   </div>
@@ -170,11 +182,68 @@
       text: url,
       width: 180,
       height: 180,
-      colorDark: "#be123c",
+      colorDark: "#000000",
       colorLight: "#ffffff",
       correctLevel: QRCode.CorrectLevel.L
     });
   }
+
+  // Hämta QR-koden som en canvas (qrcodejs ritar både canvas och img)
+  function getQrCanvas() {
+    const container = document.getElementById("qrcode");
+    let canvas = container.querySelector("canvas");
+    if (canvas) return Promise.resolve(canvas);
+    // Fallback: bygg en canvas från img-elementet
+    const img = container.querySelector("img");
+    if (!img) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      const c = document.createElement("canvas");
+      c.width = img.naturalWidth || 180;
+      c.height = img.naturalHeight || 180;
+      const draw = () => {
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        resolve(c);
+      };
+      if (img.complete) draw(); else img.onload = draw;
+    });
+  }
+
+  function flash(btn, text) {
+    const original = btn.textContent;
+    btn.textContent = text;
+    btn.classList.add("done");
+    setTimeout(() => { btn.textContent = original; btn.classList.remove("done"); }, 2000);
+  }
+
+  document.getElementById("copyQrBtn").addEventListener("click", async () => {
+    const btn = document.getElementById("copyQrBtn");
+    const canvas = await getQrCanvas();
+    if (!canvas) { alert("Kunde inte läsa QR-koden."); return; }
+    try {
+      const blob = await new Promise((res) => canvas.toBlob(res, "image/png"));
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      flash(btn, "Kopierad! ✓");
+    } catch {
+      // Bildkopiering stöds inte här – ladda ner istället
+      downloadQr();
+      flash(btn, "Nedladdad ✓");
+    }
+  });
+
+  function downloadQr() {
+    getQrCanvas().then((canvas) => {
+      if (!canvas) { alert("Kunde inte läsa QR-koden."); return; }
+      const a = document.createElement("a");
+      a.href = canvas.toDataURL("image/png");
+      a.download = "fodelsedagskort-qr.png";
+      a.click();
+    });
+  }
+
+  document.getElementById("dlQrBtn").addEventListener("click", () => {
+    downloadQr();
+    flash(document.getElementById("dlQrBtn"), "Nedladdad ✓");
+  });
 
   const copyBtn = document.getElementById("copyBtn");
   copyBtn.addEventListener("click", async () => {
