@@ -161,7 +161,10 @@
 
     const data = { to, msg, from, e: chosenEmoji };
     const encoded = encodeData(data);
-    const url = location.origin + location.pathname.replace(/index\.html$/, "") + "card.html#" + encoded;
+    // Ta bort ev. "index.html" eller "index" på slutet och säkerställ avslutande slash
+    let base = location.pathname.replace(/(index\.html|index)$/, "");
+    if (!base.endsWith("/")) base += "/";
+    const url = location.origin + base + "card#" + encoded;
 
     const linkOut = document.getElementById("linkOut");
     linkOut.value = url;
