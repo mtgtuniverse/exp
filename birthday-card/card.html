@@ -65,7 +65,7 @@
   <div class="card" id="card">
     <span class="big-emoji" id="emoji">🎂</span>
     <p class="to" id="to"></p>
-    <h1>Grattis på födelsedagen!</h1>
+    <h1 id="greeting">Grattis på födelsedagen!</h1>
     <p class="msg" id="msg"></p>
     <p class="from" id="from"></p>
     <a class="make-own" href="./">Skapa ett eget kort →</a>
@@ -86,17 +86,21 @@
   const to = (data.to || "").trim();
   const msg = (data.msg || "").trim();
   const from = (data.from || "").trim();
+  const greeting = (data.g || "").trim();
   const emoji = data.e || "🎂";
 
   document.getElementById("emoji").textContent = emoji;
+
+  // Hälsningsfras (huvudrubriken) – säkert via textContent
+  document.getElementById("greeting").textContent = greeting || "Grattis på födelsedagen!";
 
   const toEl = document.getElementById("to");
   if (to) { toEl.innerHTML = "Till <strong></strong>"; toEl.querySelector("strong").textContent = to; }
   else { toEl.style.display = "none"; }
 
   const msgEl = document.getElementById("msg");
-  if (msg) { msgEl.textContent = msg; }
-  else { msgEl.textContent = "Hoppas du får en jättefin dag! 🎈"; }
+  if (msg) { msgEl.textContent = msg; msgEl.style.display = ""; }
+  else { msgEl.style.display = "none"; }
 
   const fromEl = document.getElementById("from");
   if (from) { fromEl.innerHTML = "Från <strong></strong>"; fromEl.querySelector("strong").textContent = from; }
