@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ett födelsedagskort till dig! 🎉</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow-x: hidden; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: linear-gradient(135deg, #a5b4fc 0%, #f472b6 50%, #fde68a 100%);
+    color: #334155;
+  }
+  .card {
+    background: #fff;
+    border-radius: 28px;
+    box-shadow: 0 25px 60px rgba(0,0,0,0.25);
+    padding: 48px 36px;
+    max-width: 520px;
+    width: 100%;
+    text-align: center;
+    position: relative;
+    z-index: 2;
+    animation: pop .6s cubic-bezier(.17,.67,.3,1.33);
+  }
+  @keyframes pop { from { transform: scale(.7); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .big-emoji {
+    font-size: 90px; line-height: 1;
+    display: inline-block;
+    animation: bounce 2s ease-in-out infinite;
+  }
+  @keyframes bounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-14px); } }
+  .to { font-size: 20px; color: #64748b; margin: 20px 0 6px; }
+  .to strong { color: #be123c; }
+  h1 { font-size: 34px; margin: 0 0 24px; color: #be123c; }
+  .msg {
+    font-size: 20px; line-height: 1.5; color: #334155;
+    white-space: pre-wrap; word-break: break-word;
+    background: #fff7ed; border-radius: 16px; padding: 20px; margin: 0 0 20px;
+  }
+  .from { font-size: 17px; color: #64748b; }
+  .from strong { color: #0d9488; }
+  .make-own {
+    display: inline-block; margin-top: 28px; font-size: 14px;
+    color: #94a3b8; text-decoration: none;
+  }
+  .make-own:hover { color: #be123c; text-decoration: underline; }
+  /* Confetti */
+  .confetti {
+    position: fixed; top: -20px; width: 10px; height: 16px;
+    opacity: .9; z-index: 1; animation: fall linear forwards;
+  }
+  @keyframes fall {
+    to { transform: translateY(110vh) rotate(720deg); opacity: 1; }
+  }
+</style>
+</head>
+<body>
+  <div class="card" id="card">
+    <span class="big-emoji" id="emoji">🎂</span>
+    <p class="to" id="to"></p>
+    <h1>Grattis på födelsedagen!</h1>
+    <p class="msg" id="msg"></p>
+    <p class="from" id="from"></p>
+    <a class="make-own" href="index.html">Skapa ett eget kort →</a>
+  </div>
+
+<script>
+  function decodeData(str) {
+    try {
+      return JSON.parse(decodeURIComponent(escape(atob(str))));
+    } catch {
+      return null;
+    }
+  }
+
+  const raw = location.hash.replace(/^#/, "");
+  const data = decodeData(raw) || {};
+
+  const to = (data.to || "").trim();
+  const msg = (data.msg || "").trim();
+  const from = (data.from || "").trim();
+  const emoji = data.e || "🎂";
+
+  document.getElementById("emoji").textContent = emoji;
+
+  const toEl = document.getElementById("to");
+  if (to) { toEl.innerHTML = "Till <strong></strong>"; toEl.querySelector("strong").textContent = to; }
+  else { toEl.style.display = "none"; }
+
+  const msgEl = document.getElementById("msg");
+  if (msg) { msgEl.textContent = msg; }
+  else { msgEl.textContent = "Hoppas du får en jättefin dag! 🎈"; }
+
+  const fromEl = document.getElementById("from");
+  if (from) { fromEl.innerHTML = "Från <strong></strong>"; fromEl.querySelector("strong").textContent = from; }
+  else { fromEl.style.display = "none"; }
+
+  // Confetti 🎉
+  const colors = ["#f472b6", "#be123c", "#fde68a", "#a5b4fc", "#0d9488", "#fca5a5"];
+  function confetti() {
+    for (let i = 0; i < 80; i++) {
+      const c = document.createElement("div");
+      c.className = "confetti";
+      c.style.left = Math.random() * 100 + "vw";
+      c.style.background = colors[Math.floor(Math.random() * colors.length)];
+      c.style.animationDuration = (2 + Math.random() * 2) + "s";
+      c.style.animationDelay = (Math.random() * 1.5) + "s";
+      c.style.transform = "rotate(" + (Math.random() * 360) + "deg)";
+      if (Math.random() > 0.5) c.style.borderRadius = "50%";
+      document.body.appendChild(c);
+      setTimeout(() => c.remove(), 5000);
+    }
+  }
+  confetti();
+</script>
+</body>
+</html>
