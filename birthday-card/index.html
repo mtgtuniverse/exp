@@ -86,14 +86,23 @@
 </head>
 <body>
   <div class="card">
-    <h1>Skapa ett födelsedagskort 🎉</h1>
-    <p class="sub">Fyll i, tryck på knappen och skicka länken till din kompis!</p>
+    <h1>Skapa en hälsning 🎉</h1>
+    <p class="sub">Fyll i, tryck på knappen och skicka länken till den du vill glädja!</p>
 
     <label for="to">Till vem?</label>
     <input id="to" type="text" placeholder="t.ex. Alva" maxlength="40">
 
-    <label for="msg">Din hälsning</label>
-    <textarea id="msg" placeholder="Grattis på födelsedagen! Hoppas du får en superdag 🎈" maxlength="300"></textarea>
+    <label for="greeting">Hälsningsfras</label>
+    <select id="greeting">
+      <option value="Grattis på födelsedagen!">Grattis på födelsedagen!</option>
+      <option value="Du är bäst!">Du är bäst!</option>
+      <option value="En hälsning från mig!">En hälsning från mig!</option>
+      <option value="__custom__">✏️ Egen fras…</option>
+    </select>
+    <input id="greetingCustom" type="text" placeholder="Skriv din egen hälsningsfras" maxlength="60" style="display:none; margin-top:8px;">
+
+    <label for="msg">Meddelande (valfritt)</label>
+    <textarea id="msg" placeholder="Hoppas du får en superdag 🎈" maxlength="300"></textarea>
 
     <label for="from">Från</label>
     <input id="from" type="text" placeholder="t.ex. Max" maxlength="40">
@@ -144,6 +153,24 @@
     chosenEmoji = btn.dataset.emoji;
   });
 
+  const greetingSel = document.getElementById("greeting");
+  const greetingCustom = document.getElementById("greetingCustom");
+  greetingSel.addEventListener("change", () => {
+    if (greetingSel.value === "__custom__") {
+      greetingCustom.style.display = "block";
+      greetingCustom.focus();
+    } else {
+      greetingCustom.style.display = "none";
+    }
+  });
+
+  function getGreeting() {
+    if (greetingSel.value === "__custom__") {
+      return greetingCustom.value.trim() || "Grattis på födelsedagen!";
+    }
+    return greetingSel.value;
+  }
+
   function encodeData(obj) {
     // UTF-8 safe base64
     return btoa(unescape(encodeURIComponent(JSON.stringify(obj))));
@@ -153,13 +180,9 @@
     const to = document.getElementById("to").value.trim();
     const msg = document.getElementById("msg").value.trim();
     const from = document.getElementById("from").value.trim();
+    const greeting = getGreeting();
 
-    if (!to && !msg && !from) {
-      alert("Fyll i åtminstone en hälsning först 🙂");
-      return;
-    }
-
-    const data = { to, msg, from, e: chosenEmoji };
+    const data = { to, msg, from, g: greeting, e: chosenEmoji };
     const encoded = encodeData(data);
     // Ta bort ev. "index.html" eller "index" på slutet och säkerställ avslutande slash
     let base = location.pathname.replace(/(index\.html|index)$/, "");
