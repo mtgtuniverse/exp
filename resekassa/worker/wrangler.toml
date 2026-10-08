@@ -1,0 +1,8 @@
+name = "resekassa"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+# KV-namespace för resedata. Byt ut id:t mot ditt egna (se README, steg 2).
+[[kv_namespaces]]
+binding = "TRIPS"
+id = "ERSATT_MED_DITT_KV_NAMESPACE_ID"
