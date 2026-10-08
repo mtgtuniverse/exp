@@ -206,17 +206,23 @@ button.link {
   padding: 8px 10px; border-radius: 8px; background: var(--bg);
 }
 .share-row.payer { background: var(--accent-light); }
-.share-row.paid .sr-name { text-decoration: line-through; }
-.share-row .sr-name { flex: 1; font-size: 14px; }
+.share-row .sr-name { font-size: 14px; }
 .share-row .sr-amount { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.share-row .sr-tag { font-size: 11px; color: var(--accent-dark); font-weight: 600; }
-.share-check {
-  width: 22px; height: 22px; border-radius: 6px;
-  border: 2px solid var(--accent); background: #fff;
-  display: grid; place-items: center; flex-shrink: 0;
-  font-size: 14px; color: #fff; cursor: pointer;
+.share-row .sr-tag { font-size: 11px; color: var(--accent-dark); font-weight: 600; margin-left: auto; }
+
+/* Rad med namn + uppskattad andel, och fält för faktiskt betalat */
+.share-row .sr-info { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.share-row .sr-share { font-size: 12px; color: var(--muted); }
+.share-row.paid .sr-share { color: var(--pos); }
+.share-row .sr-pay { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.share-row .sr-actual {
+  width: 92px; margin-top: 0; padding: 8px 9px; text-align: right; font-size: 14px;
 }
-.share-row.paid .share-check { background: var(--accent); }
+.share-row.paid .sr-actual { border-color: var(--accent); background: var(--accent-light); }
+.share-row .sr-quick {
+  border: 1px solid var(--border); background: #fff; color: var(--accent);
+  font-size: 12px; font-weight: 600; padding: 7px 9px; border-radius: 8px; white-space: nowrap;
+}
 
 .expense-item .ei-del {
   background: none; border: none; color: var(--neg);

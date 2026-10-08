@@ -11,9 +11,9 @@
      origAmount,                  // beloppet i originalvaluta (= amount om SEK)
      rate,                        // 1 GBP = rate SEK (0 om SEK)
      splitMode: "even"|"custom",
-     shares: { personId: belopp },// vad varje person är skyldig (alltid i SEK)
-     paid:   { personId: true }   // vilka som swishat sin andel (per utlägg)
-   }
+     shares: { personId: belopp },// uppskattad andel per person (alltid i SEK)
+     actual: { personId: belopp } // FAKTISKT betalat tillbaka (SEK). Finns en post
+   }                              // (även 0) = registrerat/klart; saknas = skyldig andel.
    amount och shares är ALLTID i SEK så all delning/total blir jämförbar.
    Betalaren behöver inte betala sig själv – deras egen andel räknas som betald.
 */
@@ -105,7 +105,7 @@ function migrateExpense(e) {
       rate: Number(e.rate) || 0,
       splitMode: e.splitMode,
       shares: e.shares || {},
-      paid: e.paid && typeof e.paid === "object" ? e.paid : {},
+      actual: migrateActual(e),
     };
   }
   // Gammalt format: { amount, payer, participants[] } -> dela lika
@@ -131,8 +131,29 @@ function migrateExpense(e) {
     rate: 0,
     splitMode: "even",
     shares,
-    paid: {},
+    actual: {},
   };
+}
+
+// Faktiskt-betalat-karta. Nytt format använder "actual". Äldre format kunde ha
+// "paid: {id:true}" (en bock) -> tolka som att hela andelen betalades.
+function migrateActual(e) {
+  if (e.actual && typeof e.actual === "object") {
+    const out = {};
+    Object.keys(e.actual).forEach((id) => {
+      const v = Number(e.actual[id]);
+      if (Number.isFinite(v)) out[id] = round2(v);
+    });
+    return out;
+  }
+  if (e.paid && typeof e.paid === "object") {
+    const out = {};
+    Object.keys(e.paid).forEach((id) => {
+      if (e.paid[id]) out[id] = round2((e.shares && e.shares[id]) || 0);
+    });
+    return out;
+  }
+  return {};
 }
 
 function scheduleSave() {
@@ -186,24 +207,33 @@ async function poll() {
 // utom betalaren själv – deras andel täcks av att de la ut pengarna).
 function debtorShares(e) {
   const rows = [];
+  const actual = e.actual || {};
   Object.keys(e.shares || {}).forEach((id) => {
     const amt = e.shares[id] || 0;
     if (amt <= 0.004) return;
     if (id === e.payer) return; // egen andel = redan "betald"
-    rows.push({ id, amount: round2(amt), paid: !!(e.paid && e.paid[id]) });
+    const registered = Object.prototype.hasOwnProperty.call(actual, id);
+    const paidAmount = registered ? round2(Number(actual[id]) || 0) : 0;
+    rows.push({
+      id,
+      amount: round2(amt),      // uppskattad andel
+      registered,               // finns ett faktiskt belopp inlagt?
+      paid: registered,         // "klar" = faktiskt belopp registrerat (regel A)
+      paidAmount,               // faktiskt betalat (SEK) när registrerat
+    });
   });
   return rows;
 }
 
-// Total per person: summa av obetalda andelar de är skyldiga (över alla utlägg),
-// samt summa de ska få tillbaka (obetalda andelar i utlägg de la ut).
+// Total per person. Regel A: finns faktiskt belopp -> använd det och räkna
+// personen som klar (ingen kvar-skuld). Saknas -> uppskattad andel är skulden.
 function computeTotals() {
-  const owes = {};     // personId -> obetalt de ska betala
-  const receives = {}; // personId -> obetalt de ska få in
+  const owes = {};     // personId -> kvar att betala (uppskattad andel, ej registrerad)
+  const receives = {}; // personId -> kvar att få in
   state.people.forEach((p) => { owes[p.id] = 0; receives[p.id] = 0; });
   state.expenses.forEach((e) => {
     debtorShares(e).forEach((d) => {
-      if (d.paid) return;
+      if (d.registered) return; // faktiskt belopp inlagt => klart, inget kvar
       if (owes[d.id] != null) owes[d.id] += d.amount;
       if (receives[e.payer] != null) receives[e.payer] += d.amount;
     });
@@ -378,7 +408,7 @@ function buildExpenseItem(e) {
   item.className = "expense-item";
 
   const debtors = debtorShares(e);
-  const unpaid = debtors.filter((d) => !d.paid);
+  const unpaid = debtors.filter((d) => !d.registered);
   const allPaid = debtors.length > 0 && unpaid.length === 0;
   const when = [e.date, e.time].filter(Boolean).join(" ");
   const splitLabel = e.splitMode === "custom" ? "anpassad delning" : "delat lika";
@@ -406,12 +436,13 @@ function buildExpenseItem(e) {
   if (debtors.length === 0) {
     prog.textContent = "Ingen är skyldig något för det här utlägget.";
   } else if (allPaid) {
-    prog.textContent = "Alla har swishat ✓";
+    const got = debtors.reduce((s, d) => s + d.paidAmount, 0);
+    prog.textContent = `Alla har betalat ✓ · totalt tillbaka: ${kr(got)}`;
     prog.classList.add("done");
   } else {
-    const paidCount = debtors.length - unpaid.length;
+    const paidCount = debtors.filter((d) => d.registered).length;
     const unpaidSum = unpaid.reduce((s, d) => s + d.amount, 0);
-    prog.textContent = `${paidCount}/${debtors.length} har swishat · kvar att få in: ${kr(unpaidSum)}`;
+    prog.textContent = `${paidCount}/${debtors.length} har betalat · kvar att få in (uppskattat): ${kr(unpaidSum)}`;
   }
 
   const sharesWrap = item.querySelector(".ei-shares");
@@ -427,14 +458,45 @@ function buildExpenseItem(e) {
   }
   debtors.forEach((d) => {
     const row = document.createElement("div");
-    row.className = "share-row" + (d.paid ? " paid" : "");
-    row.innerHTML = `
-      <div class="share-check">${d.paid ? "✓" : ""}</div>
-      <span class="sr-name"></span>
-      <span class="sr-amount"></span>`;
-    row.querySelector(".sr-name").textContent = nameOf(d.id);
-    row.querySelector(".sr-amount").textContent = kr2(d.amount);
-    row.onclick = () => togglePaid(e.id, d.id);
+    row.className = "share-row" + (d.registered ? " paid" : "");
+
+    const info = document.createElement("div");
+    info.className = "sr-info";
+    const nameEl = document.createElement("span");
+    nameEl.className = "sr-name";
+    nameEl.textContent = nameOf(d.id);
+    const shareEl = document.createElement("span");
+    shareEl.className = "sr-share";
+    shareEl.textContent = "andel " + kr2(d.amount);
+    info.appendChild(nameEl);
+    info.appendChild(shareEl);
+
+    const pay = document.createElement("div");
+    pay.className = "sr-pay";
+    const input = document.createElement("input");
+    input.type = "number";
+    input.inputMode = "decimal";
+    input.min = "0";
+    input.step = "0.01";
+    input.className = "sr-actual";
+    input.placeholder = "betalat kr";
+    input.value = d.registered ? String(d.paidAmount) : "";
+    input.addEventListener("change", () => {
+      const raw = input.value.trim();
+      setActual(e.id, d.id, raw === "" ? null : parseFloat(raw));
+    });
+    const quick = document.createElement("button");
+    quick.type = "button";
+    quick.className = "sr-quick";
+    quick.textContent = "= andel";
+    quick.title = "Fyll i exakt den uppskattade andelen";
+    quick.onclick = () => setActual(e.id, d.id, d.amount);
+
+    pay.appendChild(input);
+    pay.appendChild(quick);
+
+    row.appendChild(info);
+    row.appendChild(pay);
     sharesWrap.appendChild(row);
   });
 
@@ -486,7 +548,7 @@ function perPersonOwedBreakdown(personId) {
   const byPayer = {};
   state.expenses.forEach((e) => {
     debtorShares(e).forEach((d) => {
-      if (d.id !== personId || d.paid) return;
+      if (d.id !== personId || d.registered) return;
       byPayer[e.payer] = (byPayer[e.payer] || 0) + d.amount;
     });
   });
@@ -514,12 +576,17 @@ function renderPeople() {
 }
 
 // ---- Åtgärder ----
-function togglePaid(expenseId, personId) {
+// value = null -> ta bort registreringen (tillbaka till "skyldig andel").
+// value = tal  -> registrera faktiskt betalat belopp (SEK). Regel A: klart.
+function setActual(expenseId, personId, value) {
   const e = state.expenses.find((x) => x.id === expenseId);
   if (!e) return;
-  if (!e.paid) e.paid = {};
-  if (e.paid[personId]) delete e.paid[personId];
-  else e.paid[personId] = true;
+  if (!e.actual) e.actual = {};
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    delete e.actual[personId];
+  } else {
+    e.actual[personId] = round2(Math.max(0, value));
+  }
   scheduleSave();
   renderExpenseList();
   renderTotals();
