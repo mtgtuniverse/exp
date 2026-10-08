@@ -6,7 +6,7 @@
 // ---- Konfiguration ----
 // Sätt WORKER_URL till din deployade Worker. Lämnas den tom körs appen i
 // lokalt läge (localStorage) så den funkar även innan Workern är uppsatt.
-const WORKER_URL = ""; // t.ex. "https://resekassa.ditt-namn.workers.dev"
+const WORKER_URL = "https://resekassa.mtgtt.workers.dev";
 const TRIP_ID = "resa"; // byt om ni vill ha flera separata resor
 
 const POLL_MS = 5000;
