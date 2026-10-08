@@ -27,9 +27,21 @@
         <input type="text" id="exp-desc" placeholder="t.ex. Middag, Taxi, Hotell" maxlength="60">
       </label>
       <div class="row">
-        <label>Belopp (kr)
+        <label style="flex:2">Belopp
           <input type="number" id="exp-amount" inputmode="decimal" min="0" step="0.01" placeholder="0">
         </label>
+        <label style="flex:1">Valuta
+          <select id="exp-currency">
+            <option value="SEK">kr (SEK)</option>
+            <option value="GBP">£ (GBP)</option>
+          </select>
+        </label>
+      </div>
+      <label id="rate-label" hidden>Växelkurs: 1 GBP = ? SEK
+        <input type="number" id="exp-rate" inputmode="decimal" min="0" step="0.0001" placeholder="t.ex. 13.20">
+      </label>
+      <p class="hint" id="rate-preview" hidden></p>
+      <div class="row">
         <label>Datum
           <input type="date" id="exp-date">
         </label>
@@ -58,7 +70,7 @@
       </div>
 
       <div class="custom-block" id="custom-block" hidden>
-        <p class="hint">Ange belopp per person. Lämna tomt (eller 0) för de som inte var med. Summan måste bli lika med beloppet.</p>
+        <p class="hint">Ange belopp per person i vald valuta. Lämna tomt (eller 0) för de som inte var med. Summan måste bli lika med beloppet.</p>
         <div id="exp-custom-rows" class="custom-rows"></div>
         <p class="custom-sum" id="custom-sum"></p>
       </div>

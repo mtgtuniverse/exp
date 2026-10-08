@@ -7,10 +7,14 @@
    {
      id, desc, amount, date (YYYY-MM-DD), time (HH:MM),
      payer,                       // personId som la ut pengarna
+     currency: "SEK"|"GBP",       // valuta utlägget angavs i
+     origAmount,                  // beloppet i originalvaluta (= amount om SEK)
+     rate,                        // 1 GBP = rate SEK (0 om SEK)
      splitMode: "even"|"custom",
-     shares: { personId: belopp },// vad varje person är skyldig för utlägget
+     shares: { personId: belopp },// vad varje person är skyldig (alltid i SEK)
      paid:   { personId: true }   // vilka som swishat sin andel (per utlägg)
    }
+   amount och shares är ALLTID i SEK så all delning/total blir jämförbar.
    Betalaren behöver inte betala sig själv – deras egen andel räknas som betald.
 */
 
@@ -38,6 +42,14 @@ const kr2 = (n) =>
   (Math.round(n * 100) / 100).toLocaleString("sv-SE", { maximumFractionDigits: 2 }) + " kr";
 const nameOf = (id) => (state.people.find((p) => p.id === id) || {}).name || "?";
 const round2 = (n) => Math.round(n * 100) / 100;
+const gbp = (n) =>
+  "£" + (Math.round(n * 100) / 100).toLocaleString("sv-SE", { maximumFractionDigits: 2 });
+
+// ---- Valuta (formulärhjälpare) ----
+function formCurrency() { return $("#exp-currency").value === "GBP" ? "GBP" : "SEK"; }
+function formRate() { return parseFloat($("#exp-rate").value) || 0; }
+// Faktor för att omvandla ett belopp i vald valuta -> SEK.
+function toSekFactor() { return formCurrency() === "GBP" ? formRate() : 1; }
 
 // ---- Synk ----
 function setSyncStatus(kind) {
@@ -80,13 +92,17 @@ function normalize(data) {
 function migrateExpense(e) {
   // Redan nytt format?
   if (e.shares && e.splitMode) {
+    const amount = Number(e.amount) || 0;
     return {
       id: e.id,
       desc: e.desc || "",
-      amount: Number(e.amount) || 0,
+      amount,
       date: e.date || "",
       time: e.time || "",
       payer: e.payer,
+      currency: e.currency === "GBP" ? "GBP" : "SEK",
+      origAmount: Number(e.origAmount) || amount,
+      rate: Number(e.rate) || 0,
       splitMode: e.splitMode,
       shares: e.shares || {},
       paid: e.paid && typeof e.paid === "object" ? e.paid : {},
@@ -110,6 +126,9 @@ function migrateExpense(e) {
     date: e.date || "",
     time: "",
     payer: e.payer,
+    currency: "SEK",
+    origAmount: amount,
+    rate: 0,
     splitMode: "even",
     shares,
     paid: {},
@@ -265,6 +284,7 @@ function renderCustomRows() {
     $("#custom-sum").textContent = "";
     return;
   }
+  const unit = formCurrency() === "GBP" ? "£" : "kr";
   state.people.forEach((p) => {
     const row = document.createElement("div");
     row.className = "custom-row";
@@ -275,7 +295,7 @@ function renderCustomRows() {
     input.inputMode = "decimal";
     input.min = "0";
     input.step = "0.01";
-    input.placeholder = "0";
+    input.placeholder = "0 " + unit;
     input.value = customAmounts[p.id] || "";
     input.oninput = () => {
       customAmounts[p.id] = input.value;
@@ -296,19 +316,40 @@ function customSumValue() {
 
 function updateCustomSum() {
   const el = $("#custom-sum");
-  const sum = customSumValue();
-  const amount = parseFloat($("#exp-amount").value) || 0;
+  const sum = customSumValue();                       // i vald valuta
+  const amount = parseFloat($("#exp-amount").value) || 0; // i vald valuta
   const diff = round2(amount - sum);
+  const isGBP = formCurrency() === "GBP";
+  const fmt = isGBP ? gbp : kr2;
+  const sekNote = isGBP && formRate() > 0 ? ` (≈ ${kr2(sum * formRate())})` : "";
   if (amount <= 0) {
-    el.textContent = `Fördelat: ${kr2(sum)}`;
+    el.textContent = `Fördelat: ${fmt(sum)}`;
     el.className = "custom-sum";
   } else if (Math.abs(diff) < 0.005) {
-    el.textContent = `Fördelat: ${kr2(sum)} ✓`;
+    el.textContent = `Fördelat: ${fmt(sum)} ✓${sekNote}`;
     el.className = "custom-sum ok";
   } else {
-    el.textContent = `Fördelat: ${kr2(sum)} av ${kr2(amount)} (${diff > 0 ? "kvar" : "för mycket"} ${kr2(Math.abs(diff))})`;
+    el.textContent = `Fördelat: ${fmt(sum)} av ${fmt(amount)} (${diff > 0 ? "kvar" : "för mycket"} ${fmt(Math.abs(diff))})`;
     el.className = "custom-sum off";
   }
+}
+
+// Uppdaterar växelkurs-fält + förhandsvisning av omräknat SEK-belopp.
+function updateCurrencyUI() {
+  const isGBP = formCurrency() === "GBP";
+  $("#rate-label").hidden = !isGBP;
+  const amount = parseFloat($("#exp-amount").value) || 0;
+  const preview = $("#rate-preview");
+  if (isGBP && formRate() > 0 && amount > 0) {
+    preview.hidden = false;
+    preview.textContent = `${gbp(amount)} × ${formRate()} ≈ ${kr2(amount * formRate())}`;
+  } else if (isGBP) {
+    preview.hidden = false;
+    preview.textContent = "Ange belopp i pund och kursen (1 GBP = ? SEK).";
+  } else {
+    preview.hidden = true;
+  }
+  if (splitMode === "custom") updateCustomSum();
 }
 
 function renderExpenseList() {
@@ -354,8 +395,12 @@ function buildExpenseItem(e) {
 
   item.querySelector(".ei-desc").textContent = e.desc || "Utlägg";
   item.querySelector(".ei-amount").textContent = kr(e.amount);
+  const curNote =
+    e.currency === "GBP" && e.rate > 0
+      ? ` · ${gbp(e.origAmount)} (kurs ${e.rate})`
+      : "";
   item.querySelector(".ei-meta").textContent =
-    `${nameOf(e.payer)} la ut · ${when || "–"} · ${splitLabel}`;
+    `${nameOf(e.payer)} la ut${curNote} · ${when || "–"} · ${splitLabel}`;
 
   const prog = item.querySelector(".ei-progress");
   if (debtors.length === 0) {
@@ -505,45 +550,61 @@ function removePerson(id) {
   renderAll();
 }
 
-function buildShares(amount, payer) {
+// Bygger andelar i SEK. amountSek är redan omräknat belopp.
+function buildShares(amountSek) {
   if (splitMode === "even") {
     const parts = [...selectedParticipants];
     if (parts.length === 0) return { error: "Välj minst en som var med." };
-    const base = Math.floor((amount / parts.length) * 100) / 100;
+    const base = Math.floor((amountSek / parts.length) * 100) / 100;
     const shares = {};
     parts.forEach((id) => (shares[id] = base));
-    const diff = round2(amount - base * parts.length);
+    const diff = round2(amountSek - base * parts.length);
     shares[parts[0]] = round2(shares[parts[0]] + diff); // restören på första
     return { shares };
   }
-  // custom
+  // custom: inmatning sker i vald valuta -> validera där, konvertera sen till SEK
+  const factor = toSekFactor();
+  const fmt = formCurrency() === "GBP" ? gbp : kr2;
+  const enteredAmount = parseFloat($("#exp-amount").value) || 0;
   const shares = {};
   let sum = 0;
   state.people.forEach((p) => {
     const v = parseFloat(customAmounts[p.id]);
-    if (v && v > 0) { shares[p.id] = round2(v); sum += v; }
+    if (v && v > 0) { shares[p.id] = v; sum += v; }
   });
   if (Object.keys(shares).length === 0) return { error: "Ange belopp för minst en person." };
-  if (Math.abs(round2(sum) - amount) > 0.01)
-    return { error: `Summan av andelarna (${kr2(sum)}) måste bli lika med beloppet (${kr2(amount)}).` };
+  if (Math.abs(round2(sum) - round2(enteredAmount)) > 0.01)
+    return { error: `Summan av andelarna (${fmt(sum)}) måste bli lika med beloppet (${fmt(enteredAmount)}).` };
+  // Konvertera varje andel till SEK; justera restören så summan = amountSek exakt.
+  const parts = Object.keys(shares);
+  let sekSum = 0;
+  parts.forEach((id) => { shares[id] = round2(shares[id] * factor); sekSum += shares[id]; });
+  const diff = round2(amountSek - sekSum);
+  if (parts.length) shares[parts[0]] = round2(shares[parts[0]] + diff);
   return { shares };
 }
 
 function addExpense() {
   const desc = $("#exp-desc").value.trim();
-  const amount = round2(parseFloat($("#exp-amount").value));
+  const origAmount = round2(parseFloat($("#exp-amount").value));
   const date = $("#exp-date").value;
   const time = $("#exp-time").value;
   const payer = $("#exp-payer").value;
+  const currency = formCurrency();
+  const rate = formRate();
   const hint = $("#exp-hint");
   hint.className = "hint";
   const fail = (m) => { hint.textContent = m; hint.className = "hint error"; };
 
   if (state.people.length === 0) return fail("Lägg till deltagare först (fliken Deltagare).");
-  if (!amount || amount <= 0) return fail("Ange ett belopp större än 0.");
+  if (!origAmount || origAmount <= 0) return fail("Ange ett belopp större än 0.");
+  if (currency === "GBP" && (!rate || rate <= 0))
+    return fail("Ange växelkursen (1 GBP = ? SEK).");
   if (!payer) return fail("Välj vem som betalade.");
 
-  const built = buildShares(amount, payer);
+  const amount = round2(origAmount * (currency === "GBP" ? rate : 1)); // SEK
+
+  const built = buildShares(amount);
   if (built.error) return fail(built.error);
 
   state.expenses.push({
@@ -553,6 +614,9 @@ function addExpense() {
     date: date || new Date().toISOString().slice(0, 10),
     time: time || "",
     payer,
+    currency,
+    origAmount,
+    rate: currency === "GBP" ? rate : 0,
     splitMode,
     shares: built.shares,
     paid: {},
@@ -562,6 +626,8 @@ function addExpense() {
   $("#exp-desc").value = "";
   $("#exp-amount").value = "";
   customAmounts = {};
+  $("#rate-preview").hidden = currency !== "GBP";
+  if (currency === "GBP") $("#rate-preview").textContent = "Ange belopp i pund och kursen (1 GBP = ? SEK).";
   hint.textContent = "Utlägg tillagt ✓";
   scheduleSave();
   renderAll();
@@ -605,9 +671,12 @@ async function init() {
   $("#person-name").addEventListener("keydown", (e) => { if (e.key === "Enter") addPerson(); });
   $("#exp-add").onclick = addExpense;
   $("#reset-trip").onclick = resetTrip;
-  $("#exp-amount").addEventListener("input", () => {
-    if (splitMode === "custom") updateCustomSum();
+  $("#exp-amount").addEventListener("input", updateCurrencyUI);
+  $("#exp-currency").addEventListener("change", () => {
+    updateCurrencyUI();
+    if (splitMode === "custom") renderCustomRows(); // uppdatera valutasymbol i rader
   });
+  $("#exp-rate").addEventListener("input", updateCurrencyUI);
   $("#exp-toggle-all").onclick = () => {
     if (selectedParticipants.size === state.people.length) selectedParticipants.clear();
     else state.people.forEach((p) => selectedParticipants.add(p.id));
