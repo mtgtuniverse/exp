@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Resekassan</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <h1>Resekassan</h1>
+  <div id="sync-status" class="sync-status" title="Synkstatus">●</div>
+</header>
+
+<nav class="tabs">
+  <button class="tab active" data-tab="expenses">Utlägg</button>
+  <button class="tab" data-tab="balances">Saldo</button>
+  <button class="tab" data-tab="settle">Avräkning</button>
+  <button class="tab" data-tab="people">Deltagare</button>
+</nav>
+
+<main>
+  <!-- UTLÄGG -->
+  <section id="tab-expenses" class="tab-panel active">
+    <div class="card add-expense">
+      <h2>Nytt utlägg</h2>
+      <label>Vad gäller det?
+        <input type="text" id="exp-desc" placeholder="t.ex. Middag, Taxi, Hotell" maxlength="60">
+      </label>
+      <div class="row">
+        <label>Belopp (kr)
+          <input type="number" id="exp-amount" inputmode="decimal" min="0" step="0.01" placeholder="0">
+        </label>
+        <label>Datum
+          <input type="date" id="exp-date">
+        </label>
+      </div>
+      <label>Vem betalade?
+        <select id="exp-payer"></select>
+      </label>
+      <div class="participants">
+        <div class="participants-head">
+          <span>Vilka var med? (delas lika)</span>
+          <button type="button" class="link" id="exp-toggle-all">Alla / inga</button>
+        </div>
+        <div id="exp-participants" class="chip-group"></div>
+      </div>
+      <button class="primary" id="exp-add">Lägg till utlägg</button>
+      <p class="hint" id="exp-hint"></p>
+    </div>
+
+    <div class="card">
+      <h2>Loggade utlägg</h2>
+      <div id="expense-list" class="expense-list"></div>
+      <p class="total-line">Totalt: <strong id="grand-total">0 kr</strong></p>
+    </div>
+  </section>
+
+  <!-- SALDO -->
+  <section id="tab-balances" class="tab-panel">
+    <div class="card">
+      <h2>Saldo per person</h2>
+      <p class="hint">Positivt = ska få tillbaka. Negativt = ska betala.</p>
+      <div id="balance-list" class="balance-list"></div>
+    </div>
+  </section>
+
+  <!-- AVRÄKNING -->
+  <section id="tab-settle" class="tab-panel">
+    <div class="card">
+      <h2>Vem swishar vem</h2>
+      <p class="hint">Minsta antal överföringar för att alla ska bli kvitt. Bocka av när swishen är klar.</p>
+      <div id="settle-list" class="settle-list"></div>
+    </div>
+  </section>
+
+  <!-- DELTAGARE -->
+  <section id="tab-people" class="tab-panel">
+    <div class="card">
+      <h2>Deltagare</h2>
+      <div class="row">
+        <input type="text" id="person-name" placeholder="Namn" maxlength="30">
+        <button class="primary" id="person-add">Lägg till</button>
+      </div>
+      <div id="people-list" class="people-list"></div>
+    </div>
+    <div class="card">
+      <h2>Data</h2>
+      <p class="hint">Allt sparas delat så ni ser samma sak på alla telefoner.</p>
+      <button class="danger" id="reset-trip">Nollställ resa</button>
+    </div>
+  </section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
