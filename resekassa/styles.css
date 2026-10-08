@@ -161,7 +161,30 @@ button.link {
 .hint { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
 .hint.error { color: var(--neg); }
 
-.expense-list { display: flex; flex-direction: column; gap: 10px; }
+/* Segmenterad kontroll (dela lika / anpassat) */
+.split-head {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 12px; font-size: 13px; font-weight: 600; color: var(--muted);
+}
+.seg { display: flex; background: var(--bg); border-radius: 10px; padding: 3px; gap: 3px; }
+.seg-btn {
+  border: none; background: none; padding: 7px 12px; font-size: 13px;
+  font-weight: 600; color: var(--muted); border-radius: 8px;
+}
+.seg-btn.active { background: #fff; color: var(--accent); box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+
+/* Anpassad split */
+.custom-rows { display: flex; flex-direction: column; gap: 8px; margin: 10px 0 4px; }
+.custom-row { display: flex; align-items: center; gap: 10px; }
+.custom-row .cr-name { flex: 1; font-size: 14px; }
+.custom-row input {
+  width: 110px; margin-top: 0; text-align: right; padding: 9px 10px;
+}
+.custom-sum { font-size: 13px; font-weight: 600; margin: 6px 0 0; text-align: right; }
+.custom-sum.ok { color: var(--pos); }
+.custom-sum.off { color: var(--neg); }
+
+.expense-list { display: flex; flex-direction: column; gap: 12px; }
 .expense-item {
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -171,38 +194,51 @@ button.link {
 .expense-item .ei-desc { font-weight: 600; }
 .expense-item .ei-amount { font-weight: 700; color: var(--accent-dark); white-space: nowrap; }
 .expense-item .ei-meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+/* Per-utlägg uppföljning av andelar */
+.ei-progress {
+  font-size: 12px; font-weight: 600; margin-top: 8px; color: var(--muted);
+}
+.ei-progress.done { color: var(--pos); }
+.ei-shares { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.share-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: 8px; background: var(--bg);
+}
+.share-row.payer { background: var(--accent-light); }
+.share-row.paid .sr-name { text-decoration: line-through; }
+.share-row .sr-name { flex: 1; font-size: 14px; }
+.share-row .sr-amount { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.share-row .sr-tag { font-size: 11px; color: var(--accent-dark); font-weight: 600; }
+.share-check {
+  width: 22px; height: 22px; border-radius: 6px;
+  border: 2px solid var(--accent); background: #fff;
+  display: grid; place-items: center; flex-shrink: 0;
+  font-size: 14px; color: #fff; cursor: pointer;
+}
+.share-row.paid .share-check { background: var(--accent); }
+
 .expense-item .ei-del {
   background: none; border: none; color: var(--neg);
-  font-size: 12px; padding: 4px 0 0; font-weight: 600;
+  font-size: 12px; padding: 10px 0 0; font-weight: 600;
 }
 .total-line { text-align: right; font-size: 14px; margin: 14px 0 0; }
 
-.balance-list, .settle-list, .people-list { display: flex; flex-direction: column; gap: 10px; }
-.balance-item {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 12px; border: 1px solid var(--border); border-radius: 10px;
+.totals-list, .people-list { display: flex; flex-direction: column; gap: 10px; }
+.total-person {
+  border: 1px solid var(--border); border-radius: 10px; padding: 12px;
 }
-.balance-item .bi-amount { font-weight: 700; font-variant-numeric: tabular-nums; }
-.balance-item .pos { color: var(--pos); }
-.balance-item .neg { color: var(--neg); }
-.balance-item .zero { color: var(--muted); }
-
-.settle-item {
-  display: flex; align-items: center; gap: 12px;
-  padding: 12px; border: 1px solid var(--border); border-radius: 10px;
+.total-person .tp-top {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
 }
-.settle-item.done { opacity: 0.55; }
-.settle-item .si-text { flex: 1; font-size: 14px; }
-.settle-item .si-text strong { font-weight: 700; }
-.settle-item .si-amount { font-weight: 700; color: var(--accent-dark); white-space: nowrap; }
-.settle-item.done .si-text { text-decoration: line-through; }
-.settle-check {
-  width: 24px; height: 24px; border-radius: 6px;
-  border: 2px solid var(--accent); background: #fff;
-  display: grid; place-items: center; flex-shrink: 0;
-  font-size: 15px; color: #fff;
+.total-person .tp-name { font-weight: 600; }
+.total-person .tp-amount { font-weight: 700; font-variant-numeric: tabular-nums; }
+.total-person .tp-amount.owing { color: var(--neg); }
+.total-person .tp-amount.clear { color: var(--pos); }
+.total-person .tp-detail { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.total-person .tp-receive {
+  font-size: 12px; color: var(--pos); font-weight: 600; margin-top: 4px;
 }
-.settle-item.done .settle-check { background: var(--accent); }
 
 .person-item {
   display: flex; justify-content: space-between; align-items: center;
